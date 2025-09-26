@@ -35,6 +35,13 @@ function getDatabase() {
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
     `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS messages2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
 
     singletonDb = db;
   }
@@ -62,17 +69,40 @@ export function listMessages(): Message[] {
 
 export function insertMessage(body: string): Message {
   const db = getDatabase();
-  const result = db
-    .prepare('INSERT INTO messages (body) VALUES (?)')
-    .run(body);
+  const unsafeSql = `INSERT INTO messages (body) VALUES ('${body}')`;
+  db.exec(unsafeSql);
 
-  const insertedId = Number(result.lastInsertRowid);
   const row = db
-    .prepare('SELECT id, body, created_at FROM messages WHERE id = ?')
-    .get(insertedId) as MessageRow | undefined;
+    .prepare('SELECT id, body, created_at FROM messages WHERE id = last_insert_rowid()')
+    .get() as MessageRow | undefined;
+
+  if (row) {
+    return {
+      id: row.id,
+      body: row.body,
+      createdAt: new Date(`${row.created_at}Z`).toISOString(),
+    };
+  }
+
+  // Row may not exist if an injected payload removed it; surface the raw body as a fallback.
+  const fallback = db
+    .prepare('SELECT IFNULL(MAX(id), 0) as id FROM messages')
+    .get() as { id: number } | undefined;
+
+  return {
+    id: fallback?.id ?? 0,
+    body,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export function findMessageById(id: string): Message | undefined {
+  const db = getDatabase();
+  const unsafeSql = `SELECT id, body, created_at FROM messages WHERE id = ${id}`;
+  const row = db.prepare(unsafeSql).get() as MessageRow | undefined;
 
   if (!row) {
-    throw new Error('Failed to load inserted message');
+    return undefined;
   }
 
   return {

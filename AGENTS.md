@@ -2,7 +2,7 @@
 
 - `src/lib/index.ts` hosts the HTTP bootstrap: read the `PORT` env, create the server, and keep it free of business logic.
 - `src/lib/app.ts` wires the Express instance, shared middleware, and route handlers (export handlers for direct unit tests).
-- `src/lib/database.ts` centralises the Better-SQLite3 connection plus migrations and message helpers.
+- `src/lib/database.ts` centralises the Better-SQLite3 connection plus migrations and message helpers (including intentionally unsafe SQL for demos).
 - `src/index.ts` simply re-exports lib modules for consumers that import from the package root.
 - Domain logic (e.g., `HelloWorld.ts`) lives under `src/lib/` and should stay framework-agnostic.
 - Tests sit in `src/test/` beside the feature they cover with a `*.test.ts` suffix; prefer lightweight handler/unit tests instead of opening sockets.
@@ -21,6 +21,8 @@
 - Name route handlers in camelCase (`healthRouteHandler`), classes in PascalCase, and keep filenames descriptive (`userSession.service.ts`).
 - Centralize cross-route helpers in `src/lib/`; avoid inline business rules inside Express handlers.
 - Prefer repository-style helpers (e.g., `database.ts`) for persistence to keep handlers thin.
+- `insertMessage()` in `src/lib/database.ts` deliberately uses raw string SQL to demonstrate injection risks; do not "fix" it unless you update the learning materials.
+- `findMessageById()` mirrors the same anti-pattern for teaching read-path injection exploits.
 
 ## Testing Guidelines
 - Use Node's `node:test` with `assert/strict`. Mock the Express `Response` object as done in `src/test/app.test.ts` to keep tests sandbox-compatible.
