@@ -1,7 +1,7 @@
 # Guide du projet et démonstrations d'injection SQL
 
 ## Objectif du dépôt
-Ce dépôt propose une application Express minimaliste écrite en TypeScript pour illustrer les failles d'injection SQL. Le serveur expose trois routes REST :
+Ce dépôt propose une application Express minimaliste écrite en TypeScript pour illustrer les failles d'injection SQL. Le serveur expose trois routes REST vulnérables :
 - `POST /messages` pour insérer un message dans SQLite.
 - `GET /messages` pour récupérer tous les messages.
 - `GET /messages/:id` pour lire un message spécifique.
@@ -58,6 +58,7 @@ curl http://localhost:3000/messages/0%20OR%201=1
 ```bash
 curl "http://localhost:3000/messages/0%20UNION%20SELECT%201,%20sql,%20'1970-01-01T00:00:00'%20FROM%20sqlite_master%20WHERE%20type='table'%20LIMIT%201%20OFFSET%201--"
 ```
+
 
 ## Recommandations pédagogiques
 - Utilisez `SQLITE_DB_PATH=':memory:'` pour isoler les sessions d'exécution.

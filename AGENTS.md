@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 - `src/lib/index.ts` hosts the HTTP bootstrap: read the `PORT` env, create the server, and keep it free of business logic.
-- `src/lib/app.ts` wires the Express instance, shared middleware, and route handlers (export handlers for direct unit tests).
+- `src/lib/app.ts` wires the Express instance, shared middleware, and route handlers (export handlers for direct unit tests). Routes actuelles : `/messages`, `/messages/:id`, et `POST /messages` pour la démonstration SQLi.
 - `src/lib/database.ts` centralises the Better-SQLite3 connection plus migrations and message helpers (including intentionally unsafe SQL for demos).
 - `src/index.ts` simply re-exports lib modules for consumers that import from the package root.
 - Domain logic lives under `src/lib/` and should stay framework-agnostic (e.g., add new feature modules alongside the database helpers).
@@ -23,6 +23,7 @@
 - Prefer repository-style helpers (e.g., `database.ts`) for persistence to keep handlers thin.
 - `insertMessage()` in `src/lib/database.ts` deliberately uses raw string SQL to demonstrate injection risks; do not "fix" it unless you update the learning materials.
 - `findMessageById()` mirrors the same anti-pattern for teaching read-path injection exploits.
+- `executeParameterizedQuery()` centralise l'exécution SQL paramétrée ; les scénarios vulnérables continuent d'y faire transiter des chaînes concaténées.
 
 ## Testing Guidelines
 - Use Node's `node:test` with `assert/strict`. Mock the Express `Response` object as done in `src/test/app.test.ts` to keep tests sandbox-compatible.

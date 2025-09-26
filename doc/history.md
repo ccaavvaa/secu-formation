@@ -12,3 +12,4 @@
 11. update POST /messages handler to return raw message payload
 12. update GET /messages handler to return array directly
 13. update GET /messages/:id handler to return raw message
+14. refactor database access to route through executeParameterizedQuery

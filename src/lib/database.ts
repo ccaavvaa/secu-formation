@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import DatabaseConstructor, { type Database as DatabaseInstance } from 'better-sqlite3';
+import DatabaseConstructor, { type Database as DatabaseInstance, type Statement as PreparedStatement } from 'better-sqlite3';
 
 type MessageRow = {
   id: number;
@@ -27,26 +27,76 @@ function getDatabase() {
     }
 
     const db = new DatabaseConstructor(dbPath);
-    db.pragma('journal_mode = WAL');
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        body TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS messages2 (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        body TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
-
     singletonDb = db;
+
+    db.pragma('journal_mode = WAL');
+    executeParameterizedQuery(
+      `CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`,
+      [],
+    );
+    executeParameterizedQuery(
+      `CREATE TABLE IF NOT EXISTS messages2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`,
+      [],
+    );
   }
 
   return singletonDb;
+}
+
+type QueryResult =
+  | {
+    kind: 'rows';
+    rows: unknown[];
+  }
+  | {
+    kind: 'run';
+    changes: number;
+    lastInsertRowid: number;
+  };
+
+export function executeParameterizedQuery(sql: string, params: unknown[]): QueryResult {
+  const db = getDatabase();
+  let statement: PreparedStatement<unknown[], unknown>;
+
+  try {
+    statement = db.prepare(sql) as PreparedStatement<unknown[], unknown>;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const isMultiStatement = message.includes('contains more than one statement');
+
+    if (isMultiStatement && params.length === 0) {
+      db.exec(sql);
+      const lastRow = db.prepare('SELECT last_insert_rowid() AS id').get() as { id: number | bigint } | undefined;
+      const changesRow = db.prepare('SELECT changes() AS changes').get() as { changes: number } | undefined;
+      return {
+        kind: 'run',
+        changes: changesRow?.changes ?? 0,
+        lastInsertRowid: Number(lastRow?.id ?? 0),
+      };
+    }
+
+    throw error;
+  }
+
+  if (statement.reader) {
+    const rows = statement.all(...params);
+    return { kind: 'rows', rows };
+  }
+
+  const result = statement.run(...params);
+  return {
+    kind: 'run',
+    changes: result.changes,
+    lastInsertRowid: Number(result.lastInsertRowid),
+  };
 }
 
 export type Message = {
@@ -56,10 +106,16 @@ export type Message = {
 };
 
 export function listMessages(): Message[] {
-  const db = getDatabase();
-  const rows = db
-    .prepare('SELECT id, body, created_at FROM messages ORDER BY id DESC')
-    .all() as MessageRow[];
+  const result = executeParameterizedQuery(
+    'SELECT id, body, created_at FROM messages ORDER BY id DESC',
+    [],
+  );
+
+  if (result.kind !== 'rows') {
+    throw new Error('Expected rows result for listMessages');
+  }
+
+  const rows = result.rows as MessageRow[];
   return rows.map((row) => ({
     id: row.id,
     body: row.body,
@@ -67,14 +123,20 @@ export function listMessages(): Message[] {
   }));
 }
 
-export function insertMessage(body: string): Message|undefined {
-  const db = getDatabase();
+export function insertMessage(body: string): Message | undefined {
   const unsafeSql = `INSERT INTO messages (body) VALUES ('${body}')`;
-  db.exec(unsafeSql);
+  executeParameterizedQuery(unsafeSql, []);
 
-  const row = db
-    .prepare('SELECT id, body, created_at FROM messages WHERE id = last_insert_rowid()')
-    .get() as MessageRow | undefined;
+  const rowResult = executeParameterizedQuery(
+    'SELECT id, body, created_at FROM messages WHERE id = last_insert_rowid()',
+    [],
+  );
+
+  if (rowResult.kind !== 'rows') {
+    throw new Error('Expected rows result when fetching inserted message');
+  }
+
+  const row = (rowResult.rows as MessageRow[])[0];
 
   if (row) {
     return {
@@ -87,9 +149,14 @@ export function insertMessage(body: string): Message|undefined {
 }
 
 export function findMessageById(id: string): Message | undefined {
-  const db = getDatabase();
   const unsafeSql = `SELECT id, body, created_at FROM messages WHERE id = ${id}`;
-  const row = db.prepare(unsafeSql).get() as MessageRow | undefined;
+  const rowResult = executeParameterizedQuery(unsafeSql, []);
+
+  if (rowResult.kind !== 'rows') {
+    throw new Error('Expected rows result when fetching message by id');
+  }
+
+  const row = (rowResult.rows as MessageRow[])[0];
 
   if (!row) {
     return undefined;
@@ -103,10 +170,9 @@ export function findMessageById(id: string): Message | undefined {
 }
 
 export function clearMessages() {
-  const db = getDatabase();
-  db.exec('DELETE FROM messages');
+  executeParameterizedQuery('DELETE FROM messages', []);
   try {
-    db.exec("DELETE FROM sqlite_sequence WHERE name = 'messages'");
+    executeParameterizedQuery("DELETE FROM sqlite_sequence WHERE name = 'messages'", []);
   } catch {
     // sqlite_sequence may not exist yet in new in-memory databases.
   }
