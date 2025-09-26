@@ -4,7 +4,7 @@
 - `src/lib/app.ts` wires the Express instance, shared middleware, and route handlers (export handlers for direct unit tests).
 - `src/lib/database.ts` centralises the Better-SQLite3 connection plus migrations and message helpers (including intentionally unsafe SQL for demos).
 - `src/index.ts` simply re-exports lib modules for consumers that import from the package root.
-- Domain logic (e.g., `HelloWorld.ts`) lives under `src/lib/` and should stay framework-agnostic.
+- Domain logic lives under `src/lib/` and should stay framework-agnostic (e.g., add new feature modules alongside the database helpers).
 - Tests sit in `src/test/` beside the feature they cover with a `*.test.ts` suffix; prefer lightweight handler/unit tests instead of opening sockets.
 - TypeScript output goes to `dist/`; generated assets and log files should be ignored via `.gitignore`.
 
