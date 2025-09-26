@@ -8,3 +8,7 @@
 7. add test illustrating schema leakage via injected id payload
 8. remove legacy hello/health routes to focus on SQL injection scenarios
 9. delete unused HelloWorld scaffold
+10. reorganize tests for readability using grouped subtests
+11. update POST /messages handler to return raw message payload
+12. update GET /messages handler to return array directly
+13. update GET /messages/:id handler to return raw message

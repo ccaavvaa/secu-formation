@@ -1,120 +1,121 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {
+  createMessageHandler,
+  getMessageHandler,
+  listMessagesHandler,
+} from '../lib/app.js';
+import { clearMessages, type Message } from '../lib/database.js';
 
 process.env.SQLITE_DB_PATH = ':memory:';
 
-const appModule = await import('../lib/app.js');
-const databaseModule = await import('../lib/database.js');
+const noop = () => {};
 
-const {
-  listMessagesHandler,
-  getMessageHandler,
-  createMessageHandler,
-} = appModule;
-const { clearMessages } = databaseModule;
+type MockResponse<T> = {
+  statusCode: number;
+  jsonPayload: T | undefined;
+  status(code: number): MockResponse<T>;
+  json(payload: T): MockResponse<T>;
+};
 
-test('create message handler persists trimmed body and returns payload', () => {
-  clearMessages();
-  const resCreate = createMockResponse();
-  const request = createMockRequest({ body: '   Test message   ' });
+type ErrorPayload = { error: string };
 
-  createMessageHandler(request as never, resCreate as never, () => {});
+test('POST /messages handler', async (t) => {
+  t.beforeEach(() => {
+    clearMessages();
+  });
 
-  assert.equal(resCreate.statusCode, 201);
-  assert(resCreate.jsonPayload);
-  assert.equal(resCreate.jsonPayload?.data.body, 'Test message');
-  assert.equal(typeof resCreate.jsonPayload?.data.id, 'number');
+  await t.test('persists trimmed body and returns payload', () => {
+    const response = invokeCreate('   Test message   ');
+
+    assert.equal(response.statusCode, 201);
+    assert(response.jsonPayload);
+    assert.equal(response.jsonPayload?.body, 'Test message');
+    assert.equal(typeof response.jsonPayload?.id, 'number');
+  });
+
+  await t.test('rejects missing or empty payload', () => {
+    const emptyResponse = createMockResponse<ErrorPayload>();
+    createMessageHandler(createMockRequest({ body: '' }) as never, emptyResponse as never, noop);
+    assert.equal(emptyResponse.statusCode, 400);
+    assert.deepEqual(emptyResponse.jsonPayload, { error: 'Message body is required.' });
+
+    const missingResponse = createMockResponse<ErrorPayload>();
+    createMessageHandler(createMockRequest({}) as never, missingResponse as never, noop);
+    assert.equal(missingResponse.statusCode, 400);
+    assert.deepEqual(missingResponse.jsonPayload, { error: 'Message body is required.' });
+  });
+
+  await t.test('injection payload clears existing messages', () => {
+    invokeCreate('First safe message');
+
+    const maliciousBody = `'); DELETE FROM messages; --`;
+    const injectionResponse = invokeCreate(maliciousBody);
+
+    assert.equal(injectionResponse.statusCode, 201);
+    assert.equal(injectionResponse.jsonPayload?.body, maliciousBody.trim());
+
+    const listResponse = invokeList();
+    assert.equal(listResponse.statusCode, 200);
+    assert(Array.isArray(listResponse.jsonPayload));
+    assert.equal(listResponse.jsonPayload?.length, 0);
+  });
 });
 
-test('list messages handler returns stored messages', () => {
-  clearMessages();
+test('GET /messages handler', async (t) => {
+  t.beforeEach(() => {
+    clearMessages();
+  });
 
-  const creationResponse = createMockResponse();
-  createMessageHandler(createMockRequest({ body: 'Stored' }) as never, creationResponse as never, () => {});
+  await t.test('returns stored messages', () => {
+    invokeCreate('Stored');
 
-  const resList = createMockResponse();
-  listMessagesHandler({} as never, resList as never, () => {});
+    const response = invokeList();
 
-  assert.equal(resList.statusCode, 200);
-  assert(Array.isArray(resList.jsonPayload?.data));
-  assert.equal(resList.jsonPayload?.data.length, 1);
-  const message = resList.jsonPayload?.data[0];
-  assert.equal(message.body, 'Stored');
-  assert.equal(typeof message.id, 'number');
-  assert.equal(typeof message.createdAt, 'string');
+    assert.equal(response.statusCode, 200);
+    assert(Array.isArray(response.jsonPayload));
+    assert.equal(response.jsonPayload?.length, 1);
+    const message = response.jsonPayload?.[0];
+    assert.equal(message.body, 'Stored');
+    assert.equal(typeof message.id, 'number');
+    assert.equal(typeof message.createdAt, 'string');
+  });
 });
 
-test('get message handler returns resource by id', () => {
-  clearMessages();
+test('GET /messages/:id handler', async (t) => {
+  t.beforeEach(() => {
+    clearMessages();
+  });
 
-  const creationResponse = createMockResponse();
-  createMessageHandler(createMockRequest({ body: 'Target message' }) as never, creationResponse as never, () => {});
+  await t.test('returns resource by id', () => {
+    const created = invokeCreate('Target message').jsonPayload;
+    const response = invokeGet(String(created?.id ?? ''));
 
-  const id = creationResponse.jsonPayload?.data.id;
-  const resGet = createMockResponse();
-  getMessageHandler({ params: { id: String(id) } } as never, resGet as never, () => {});
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.jsonPayload?.id, created?.id);
+    assert.equal(response.jsonPayload?.body, 'Target message');
+  });
 
-  assert.equal(resGet.statusCode, 200);
-  assert.equal(resGet.jsonPayload?.data.id, id);
-  assert.equal(resGet.jsonPayload?.data.body, 'Target message');
+  await t.test('executes raw SQL when id is injected', () => {
+    invokeCreate('safe');
+
+    const response = invokeGet('0 OR 1=1');
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.jsonPayload?.body, 'safe');
+  });
+
+  await t.test('can leak schema definition via UNION payload', () => {
+    const payload = "0 UNION SELECT 1, sql, '1970-01-01T00:00:00' FROM sqlite_master WHERE type='table' LIMIT 1 OFFSET 1--";
+
+    const response = invokeGet(payload);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.jsonPayload?.body ?? '', "CREATE TABLE messages2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        body TEXT NOT NULL,\n        created_at TEXT NOT NULL DEFAULT (datetime('now'))\n      )");
+  });
 });
 
-test('get message handler executes raw SQL for id', () => {
-  clearMessages();
-
-  createMessageHandler(createMockRequest({ body: 'safe' }) as never, createMockResponse() as never, () => {});
-
-  const resGet = createMockResponse();
-  getMessageHandler({ params: { id: "0 OR 1=1" } } as never, resGet as never, () => {});
-
-  assert.equal(resGet.statusCode, 200);
-  assert.equal(resGet.jsonPayload?.data.body, 'safe');
-});
-
-test('get message handler injection can expose schema metadata', () => {
-  clearMessages();
-
-  const payload = "0 UNION SELECT 1, name, '1970-01-01T00:00:00' FROM sqlite_master WHERE type='table' LIMIT 1 OFFSET 1--";
-  const resGet = createMockResponse();
-  getMessageHandler({ params: { id: payload } } as never, resGet as never, () => {});
-
-  assert.equal(resGet.statusCode, 200);
-  assert.equal(resGet.jsonPayload?.data.body, 'messages2');
-});
-
-test('injection payload clears existing messages', () => {
-  clearMessages();
-
-  createMessageHandler(createMockRequest({ body: 'First safe message' }) as never, createMockResponse() as never, () => {});
-
-  const maliciousBody = `'); DELETE FROM messages; --`;
-  const resMalicious = createMockResponse();
-  createMessageHandler(createMockRequest({ body: maliciousBody }) as never, resMalicious as never, () => {});
-
-  assert.equal(resMalicious.statusCode, 201);
-  assert.equal(resMalicious.jsonPayload?.data.body, maliciousBody.trim());
-
-  const resList = createMockResponse();
-  listMessagesHandler({} as never, resList as never, () => {});
-  assert.equal(resList.statusCode, 200);
-  assert.equal(resList.jsonPayload?.data.length, 0);
-});
-
-test('create message handler rejects missing or empty payload', () => {
-  clearMessages();
-
-  const resEmpty = createMockResponse();
-  createMessageHandler(createMockRequest({ body: '' }) as never, resEmpty as never, () => {});
-  assert.equal(resEmpty.statusCode, 400);
-  assert.deepEqual(resEmpty.jsonPayload, { error: 'Message body is required.' });
-
-  const resMissing = createMockResponse();
-  createMessageHandler(createMockRequest({}) as never, resMissing as never, () => {});
-  assert.equal(resMissing.statusCode, 400);
-  assert.deepEqual(resMissing.jsonPayload, { error: 'Message body is required.' });
-});
-
-function createMockRequest(body: Record<string, unknown>) {
+function createMockRequest<T extends Record<string, unknown>>(body: T) {
   return {
     method: 'POST',
     body,
@@ -122,17 +123,36 @@ function createMockRequest(body: Record<string, unknown>) {
   };
 }
 
-function createMockResponse() {
-  return {
+function createMockResponse<T = unknown>(): MockResponse<T> {
+  const response: MockResponse<T> = {
     statusCode: 200,
-    jsonPayload: undefined as unknown,
-    status(code: number) {
-      this.statusCode = code;
-      return this;
+    jsonPayload: undefined,
+    status(code) {
+      response.statusCode = code;
+      return response;
     },
-    json(payload: unknown) {
-      this.jsonPayload = payload;
-      return this;
+    json(payload) {
+      response.jsonPayload = payload;
+      return response;
     },
   };
+  return response;
+}
+
+function invokeCreate(body: string): MockResponse<Message> {
+  const response = createMockResponse<Message>();
+  createMessageHandler(createMockRequest({ body }) as never, response as never, noop);
+  return response;
+}
+
+function invokeList(): MockResponse<Message[]> {
+  const response = createMockResponse<Message[]>();
+  listMessagesHandler({} as never, response as never, noop);
+  return response;
+}
+
+function invokeGet(idParam: string): MockResponse<Message> {
+  const response = createMockResponse<Message>();
+  getMessageHandler({ params: { id: idParam } } as never, response as never, noop);
+  return response;
 }

@@ -3,7 +3,7 @@ import { findMessageById, insertMessage, listMessages } from './database.js';
 
 export const listMessagesHandler: RequestHandler = (_req, res) => {
   const messages = listMessages();
-  res.json({ data: messages });
+  res.json(messages);
 };
 
 export const getMessageHandler: RequestHandler = (req, res) => {
@@ -20,7 +20,7 @@ export const getMessageHandler: RequestHandler = (req, res) => {
     return;
   }
 
-  res.json({ data: message });
+  res.json(message);
 };
 
 export const createMessageHandler: RequestHandler = (req, res) => {
@@ -32,7 +32,7 @@ export const createMessageHandler: RequestHandler = (req, res) => {
   }
 
   const message = insertMessage(bodyValue);
-  res.status(201).json({ data: message });
+  res.status(201).json(message);
 };
 
 export function createApp() {
