@@ -7,29 +7,11 @@ const appModule = await import('../lib/app.js');
 const databaseModule = await import('../lib/database.js');
 
 const {
-  helloRouteHandler,
-  healthRouteHandler,
   listMessagesHandler,
   getMessageHandler,
   createMessageHandler,
 } = appModule;
 const { clearMessages } = databaseModule;
-
-test('hello route handler returns hello message payload', () => {
-  const res = createMockResponse();
-  helloRouteHandler({} as never, res as never, () => {});
-
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.jsonPayload, { message: 'Hello, world!' });
-});
-
-test('health route handler returns ok status', () => {
-  const res = createMockResponse();
-  healthRouteHandler({} as never, res as never, () => {});
-
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.jsonPayload, { status: 'ok' });
-});
 
 test('create message handler persists trimmed body and returns payload', () => {
   clearMessages();

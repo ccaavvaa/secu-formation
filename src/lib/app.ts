@@ -1,16 +1,5 @@
 import express, { type RequestHandler } from 'express';
-import { HelloWorld } from './HelloWorld.js';
 import { findMessageById, insertMessage, listMessages } from './database.js';
-
-const helloWorld = new HelloWorld();
-
-export const helloRouteHandler: RequestHandler = (_req, res) => {
-  res.json({ message: helloWorld.sayHello() });
-};
-
-export const healthRouteHandler: RequestHandler = (_req, res) => {
-  res.json({ status: 'ok' });
-};
 
 export const listMessagesHandler: RequestHandler = (_req, res) => {
   const messages = listMessages();
@@ -50,8 +39,6 @@ export function createApp() {
   const app = express();
 
   app.use(express.json());
-  app.get('/', helloRouteHandler);
-  app.get('/health', healthRouteHandler);
   app.get('/messages', listMessagesHandler);
   app.get('/messages/:id', getMessageHandler);
   app.post('/messages', createMessageHandler);

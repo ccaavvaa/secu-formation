@@ -6,3 +6,4 @@
 5. modify SQLite insert logic to demonstrate SQL injection vulnerability
 6. add `/messages/:id` lookup route using vulnerable SQL concatenation
 7. add test illustrating schema leakage via injected id payload
+8. remove legacy hello/health routes to focus on SQL injection scenarios
