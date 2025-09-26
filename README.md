@@ -1,4 +1,3 @@
 # secu-form
 
-Refer to [Repository Guidelines](AGENTS.md) for contribution and workflow details.
-
+Minimal Express + TypeScript starter. Use `npm run dev` for live reload and see [Repository Guidelines](AGENTS.md) for workflows.
