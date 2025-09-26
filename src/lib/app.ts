@@ -32,6 +32,10 @@ export const createMessageHandler: RequestHandler = (req, res) => {
   }
 
   const message = insertMessage(bodyValue);
+  if(message === undefined) {
+    res.status(500).json({ error: 'Failed to create message.' });
+    return;
+  }
   res.status(201).json(message);
 };
 

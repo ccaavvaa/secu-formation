@@ -67,7 +67,7 @@ export function listMessages(): Message[] {
   }));
 }
 
-export function insertMessage(body: string): Message {
+export function insertMessage(body: string): Message|undefined {
   const db = getDatabase();
   const unsafeSql = `INSERT INTO messages (body) VALUES ('${body}')`;
   db.exec(unsafeSql);
@@ -83,17 +83,7 @@ export function insertMessage(body: string): Message {
       createdAt: new Date(`${row.created_at}Z`).toISOString(),
     };
   }
-
-  // Row may not exist if an injected payload removed it; surface the raw body as a fallback.
-  const fallback = db
-    .prepare('SELECT IFNULL(MAX(id), 0) as id FROM messages')
-    .get() as { id: number } | undefined;
-
-  return {
-    id: fallback?.id ?? 0,
-    body,
-    createdAt: new Date().toISOString(),
-  };
+  return undefined;
 }
 
 export function findMessageById(id: string): Message | undefined {

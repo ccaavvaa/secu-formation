@@ -52,9 +52,8 @@ test('POST /messages handler', async (t) => {
     const maliciousBody = `'); DELETE FROM messages; --`;
     const injectionResponse = invokeCreate(maliciousBody);
 
-    assert.equal(injectionResponse.statusCode, 201);
-    assert.equal(injectionResponse.jsonPayload?.body, maliciousBody.trim());
-
+    assert.equal(injectionResponse.statusCode, 500);
+    
     const listResponse = invokeList();
     assert.equal(listResponse.statusCode, 200);
     assert(Array.isArray(listResponse.jsonPayload));
