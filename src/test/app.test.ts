@@ -1,59 +1,53 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  createMessageHandler,
-  getMessageHandler,
-  listMessagesHandler,
-} from '../lib/app.js';
-import { clearMessages, type Message } from '../lib/database.js';
+import type { Express } from 'express';
+import request from 'supertest';
+import { createApp } from '../lib/app.js';
+import { VulnerableMessageRepository, SecureMessageRepository } from '../lib/message-repository.js';
 
 process.env.SQLITE_DB_PATH = ':memory:';
 
-const noop = () => {};
+test('API avec VulnerableMessageRepository', async (t) => {
+  let app: Express;
+  const repository = new VulnerableMessageRepository();
 
-type MockResponse<T> = {
-  statusCode: number;
-  jsonPayload: T | undefined;
-  status(code: number): MockResponse<T>;
-  json(payload: T): MockResponse<T>;
-};
-
-type ErrorPayload = { error: string };
-
-test('Gestionnaire POST /messages', async (t) => {
   t.beforeEach(() => {
-    clearMessages();
+    repository.clearMessages();
+    app = createApp(repository);
   });
 
-  await t.test('persiste le corps nettoyé et retourne le payload', () => {
+  await t.test('POST /messages persiste le corps nettoyé et retourne le payload', async () => {
     // Test de fonctionnement normal : vérifie que les espaces sont correctement supprimés
     // et que le message est persisté dans la base de données
-    const response = invokeCreate('   Message de test   ');
+    const response = await request(app)
+      .post('/messages')
+      .send({ body: '   Message de test   ' })
+      .expect(201);
 
-    assert.equal(response.statusCode, 201);
-    assert(response.jsonPayload);
-    assert.equal(response.jsonPayload?.body, 'Message de test');
-    assert.equal(typeof response.jsonPayload?.id, 'number');
+    assert.equal(response.body.body, 'Message de test');
+    assert.equal(typeof response.body.id, 'number');
   });
 
-  await t.test('rejette les payloads manquants ou vides', () => {
+  await t.test('POST /messages rejette les payloads manquants ou vides', async () => {
     // Test de validation : vérifie que l'API rejette correctement les corps de message vides
     // Cette validation basique ne protège PAS contre les injections SQL
-    const emptyResponse = createMockResponse<ErrorPayload>();
-    createMessageHandler(createMockRequest({ body: '' }) as never, emptyResponse as never, noop);
-    assert.equal(emptyResponse.statusCode, 400);
-    assert.deepEqual(emptyResponse.jsonPayload, { error: 'Le corps du message est requis.' });
+    await request(app)
+      .post('/messages')
+      .send({ body: '' })
+      .expect(400)
+      .expect({ error: 'Le corps du message est requis.' });
 
-    const missingResponse = createMockResponse<ErrorPayload>();
-    createMessageHandler(createMockRequest({}) as never, missingResponse as never, noop);
-    assert.equal(missingResponse.statusCode, 400);
-    assert.deepEqual(missingResponse.jsonPayload, { error: 'Le corps du message est requis.' });
+    await request(app)
+      .post('/messages')
+      .send({})
+      .expect(400)
+      .expect({ error: 'Le corps du message est requis.' });
   });
 
-  await t.test('le payload d\'injection efface les messages existants', () => {
+  await t.test('POST /messages le payload d\'injection efface les messages existants', async () => {
     // DÉMONSTRATION D'INJECTION SQL #1 : Suppression de données (DELETE)
     //
-    // Ce test illustre comment un attaquant peut exploiter insertMessage() dans database.ts:127
+    // Ce test illustre comment un attaquant peut exploiter insertMessage() dans VulnerableMessageRepository
     // qui construit la requête avec : INSERT INTO messages (body) VALUES ('${body}')
     //
     // Payload malveillant : '); DELETE FROM messages; --
@@ -69,62 +63,65 @@ test('Gestionnaire POST /messages', async (t) => {
     //
     // Impact : Tous les messages de la table sont supprimés
     // Contre-mesure : Utiliser des requêtes paramétrées au lieu de la concaténation de chaînes
-    invokeCreate('Premier message sûr');
+    await request(app)
+      .post('/messages')
+      .send({ body: 'Premier message sûr' })
+      .expect(201);
 
     const maliciousBody = `'); DELETE FROM messages; --`;
-    const injectionResponse = invokeCreate(maliciousBody);
+    await request(app)
+      .post('/messages')
+      .send({ body: maliciousBody })
+      .expect(500);
 
-    assert.equal(injectionResponse.statusCode, 500);
+    const listResponse = await request(app)
+      .get('/messages')
+      .expect(200);
 
-    const listResponse = invokeList();
-    assert.equal(listResponse.statusCode, 200);
-    assert(Array.isArray(listResponse.jsonPayload));
-    assert.equal(listResponse.jsonPayload?.length, 0);
-  });
-});
-
-test('Gestionnaire GET /messages', async (t) => {
-  t.beforeEach(() => {
-    clearMessages();
+    assert(Array.isArray(listResponse.body));
+    assert.equal(listResponse.body.length, 0);
   });
 
-  await t.test('retourne les messages stockés', () => {
+  await t.test('GET /messages retourne les messages stockés', async () => {
     // Test de fonctionnement normal : vérifie que listMessages() retourne correctement
     // les messages existants. Cette fonction utilise des requêtes paramétrées et est SÉCURISÉE
-    invokeCreate('Stocké');
+    await request(app)
+      .post('/messages')
+      .send({ body: 'Stocké' })
+      .expect(201);
 
-    const response = invokeList();
+    const response = await request(app)
+      .get('/messages')
+      .expect(200);
 
-    assert.equal(response.statusCode, 200);
-    assert(Array.isArray(response.jsonPayload));
-    assert.equal(response.jsonPayload?.length, 1);
-    const message = response.jsonPayload?.[0];
+    assert(Array.isArray(response.body));
+    assert.equal(response.body.length, 1);
+    const message = response.body[0];
     assert.equal(message.body, 'Stocké');
     assert.equal(typeof message.id, 'number');
     assert.equal(typeof message.createdAt, 'string');
   });
-});
 
-test('Gestionnaire GET /messages/:id', async (t) => {
-  t.beforeEach(() => {
-    clearMessages();
-  });
-
-  await t.test('retourne la ressource par id', () => {
+  await t.test('GET /messages/:id retourne la ressource par id', async () => {
     // Test de fonctionnement normal : vérifie la récupération d'un message par son ID
     // Lorsque l'ID est un nombre valide, la fonction fonctionne correctement
-    const created = invokeCreate('Message cible').jsonPayload;
-    const response = invokeGet(String(created?.id ?? ''));
+    const createResponse = await request(app)
+      .post('/messages')
+      .send({ body: 'Message cible' })
+      .expect(201);
 
-    assert.equal(response.statusCode, 200);
-    assert.equal(response.jsonPayload?.id, created?.id);
-    assert.equal(response.jsonPayload?.body, 'Message cible');
+    const response = await request(app)
+      .get(`/messages/${createResponse.body.id}`)
+      .expect(200);
+
+    assert.equal(response.body.id, createResponse.body.id);
+    assert.equal(response.body.body, 'Message cible');
   });
 
-  await t.test('exécute du SQL brut lorsque l\'id est injecté', () => {
+  await t.test('GET /messages/:id exécute du SQL brut lorsque l\'id est injecté', async () => {
     // DÉMONSTRATION D'INJECTION SQL #2 : Contournement de la condition WHERE (Boolean-based)
     //
-    // Ce test exploite findMessageById() dans database.ts:152
+    // Ce test exploite findMessageById() dans VulnerableMessageRepository
     // qui construit la requête avec : WHERE id = ${id}
     //
     // Payload malveillant : 0 OR 1=1
@@ -139,18 +136,22 @@ test('Gestionnaire GET /messages/:id', async (t) => {
     // Impact : Retourne le premier message disponible au lieu de rejeter la requête invalide
     // Risque : Accès non autorisé à des données, contournement de la logique métier
     // Contre-mesure : Valider strictement que l'ID est numérique ET utiliser des requêtes paramétrées
-    invokeCreate('sûr');
+    await request(app)
+      .post('/messages')
+      .send({ body: 'sûr' })
+      .expect(201);
 
-    const response = invokeGet('0 OR 1=1');
+    const response = await request(app)
+      .get('/messages/0 OR 1=1')
+      .expect(200);
 
-    assert.equal(response.statusCode, 200);
-    assert.equal(response.jsonPayload?.body, 'sûr');
+    assert.equal(response.body.body, 'sûr');
   });
 
-  await t.test('peut divulguer la définition du schéma via un payload UNION', () => {
+  await t.test('GET /messages/:id peut divulguer la définition du schéma via un payload UNION', async () => {
     // DÉMONSTRATION D'INJECTION SQL #3 : Extraction de métadonnées (UNION-based)
     //
-    // Ce test exploite findMessageById() dans database.ts:152 avec une attaque UNION SELECT
+    // Ce test exploite findMessageById() dans VulnerableMessageRepository avec une attaque UNION SELECT
     //
     // Payload malveillant :
     //   0 UNION SELECT 1, sql, '1970-01-01T00:00:00' FROM sqlite_master WHERE type='table' LIMIT 1 OFFSET 1--
@@ -173,51 +174,136 @@ test('Gestionnaire GET /messages/:id', async (t) => {
     // Contre-mesure : Requêtes paramétrées + validation stricte des types d'entrée
     const payload = "0 UNION SELECT 1, sql, '1970-01-01T00:00:00' FROM sqlite_master WHERE type='table' LIMIT 1 OFFSET 1--";
 
-    const response = invokeGet(payload);
+    const response = await request(app)
+      .get(`/messages/${encodeURIComponent(payload)}`)
+      .expect(200);
 
-    assert.equal(response.statusCode, 200);
-    assert.equal(response.jsonPayload?.body ?? '', "CREATE TABLE messages2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        body TEXT NOT NULL,\n        created_at TEXT NOT NULL DEFAULT (datetime('now'))\n      )");
+    assert.equal(response.body.body, "CREATE TABLE messages2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        body TEXT NOT NULL,\n        created_at TEXT NOT NULL DEFAULT (datetime('now'))\n      )");
   });
 });
 
-function createMockRequest<T extends Record<string, unknown>>(body: T) {
-  return {
-    method: 'POST',
-    body,
-    headers: {},
-  };
-}
+test('API avec SecureMessageRepository', async (t) => {
+  let app: Express;
+  const repository = new SecureMessageRepository();
 
-function createMockResponse<T = unknown>(): MockResponse<T> {
-  const response: MockResponse<T> = {
-    statusCode: 200,
-    jsonPayload: undefined,
-    status(code) {
-      response.statusCode = code;
-      return response;
-    },
-    json(payload) {
-      response.jsonPayload = payload;
-      return response;
-    },
-  };
-  return response;
-}
+  t.beforeEach(() => {
+    repository.clearMessages();
+    app = createApp(repository);
+  });
 
-function invokeCreate(body: string): MockResponse<Message> {
-  const response = createMockResponse<Message>();
-  createMessageHandler(createMockRequest({ body }) as never, response as never, noop);
-  return response;
-}
+  await t.test('POST /messages persiste le corps nettoyé et retourne le payload', async () => {
+    // Test de fonctionnement normal avec l'implémentation sécurisée
+    const response = await request(app)
+      .post('/messages')
+      .send({ body: '   Message de test   ' })
+      .expect(201);
 
-function invokeList(): MockResponse<Message[]> {
-  const response = createMockResponse<Message[]>();
-  listMessagesHandler({} as never, response as never, noop);
-  return response;
-}
+    assert.equal(response.body.body, 'Message de test');
+    assert.equal(typeof response.body.id, 'number');
+  });
 
-function invokeGet(idParam: string): MockResponse<Message> {
-  const response = createMockResponse<Message>();
-  getMessageHandler({ params: { id: idParam } } as never, response as never, noop);
-  return response;
-}
+  await t.test('POST /messages rejette les payloads manquants ou vides', async () => {
+    await request(app)
+      .post('/messages')
+      .send({ body: '' })
+      .expect(400)
+      .expect({ error: 'Le corps du message est requis.' });
+
+    await request(app)
+      .post('/messages')
+      .send({})
+      .expect(400)
+      .expect({ error: 'Le corps du message est requis.' });
+  });
+
+  await t.test('POST /messages protège contre l\'injection DELETE', async () => {
+    // ✅ DÉMONSTRATION DE PROTECTION : L'implémentation sécurisée résiste à l'injection DELETE
+    //
+    // SecureMessageRepository utilise des requêtes paramétrées : INSERT INTO messages (body) VALUES (?)
+    // Le payload malveillant est traité comme une simple chaîne de caractères
+    await request(app)
+      .post('/messages')
+      .send({ body: 'Premier message sûr' })
+      .expect(201);
+
+    const maliciousBody = `'); DELETE FROM messages; --`;
+    const maliciousResponse = await request(app)
+      .post('/messages')
+      .send({ body: maliciousBody })
+      .expect(201);
+
+    // Le payload malveillant est stocké littéralement dans le champ body
+    assert.equal(maliciousResponse.body.body, maliciousBody);
+
+    // Tous les messages sont toujours présents
+    const listResponse = await request(app)
+      .get('/messages')
+      .expect(200);
+
+    assert(Array.isArray(listResponse.body));
+    assert.equal(listResponse.body.length, 2);
+  });
+
+  await t.test('GET /messages retourne les messages stockés', async () => {
+    await request(app)
+      .post('/messages')
+      .send({ body: 'Stocké' })
+      .expect(201);
+
+    const response = await request(app)
+      .get('/messages')
+      .expect(200);
+
+    assert(Array.isArray(response.body));
+    assert.equal(response.body.length, 1);
+    const message = response.body[0];
+    assert.equal(message.body, 'Stocké');
+    assert.equal(typeof message.id, 'number');
+    assert.equal(typeof message.createdAt, 'string');
+  });
+
+  await t.test('GET /messages/:id retourne la ressource par id', async () => {
+    const createResponse = await request(app)
+      .post('/messages')
+      .send({ body: 'Message cible' })
+      .expect(201);
+
+    const response = await request(app)
+      .get(`/messages/${createResponse.body.id}`)
+      .expect(200);
+
+    assert.equal(response.body.id, createResponse.body.id);
+    assert.equal(response.body.body, 'Message cible');
+  });
+
+  await t.test('GET /messages/:id protège contre l\'injection Boolean-based', async () => {
+    // ✅ DÉMONSTRATION DE PROTECTION : L'implémentation sécurisée résiste à l'injection OR 1=1
+    //
+    // SecureMessageRepository utilise des requêtes paramétrées : WHERE id = ?
+    // Le payload "0 OR 1=1" est traité comme une chaîne littérale, pas comme du code SQL
+    await request(app)
+      .post('/messages')
+      .send({ body: 'sûr' })
+      .expect(201);
+
+    // Avec l'implémentation sécurisée, l'injection échoue
+    await request(app)
+      .get('/messages/0 OR 1=1')
+      .expect(404)
+      .expect({ error: 'Message non trouvé' });
+  });
+
+  await t.test('GET /messages/:id protège contre l\'injection UNION-based', async () => {
+    // ✅ DÉMONSTRATION DE PROTECTION : L'implémentation sécurisée résiste à l'injection UNION SELECT
+    //
+    // SecureMessageRepository utilise des requêtes paramétrées : WHERE id = ?
+    // Le payload UNION SELECT complet est traité comme une valeur littérale
+    const payload = "0 UNION SELECT 1, sql, '1970-01-01T00:00:00' FROM sqlite_master WHERE type='table' LIMIT 1 OFFSET 1--";
+
+    // Avec l'implémentation sécurisée, l'injection échoue
+    await request(app)
+      .get(`/messages/${encodeURIComponent(payload)}`)
+      .expect(404)
+      .expect({ error: 'Message non trouvé' });
+  });
+});
