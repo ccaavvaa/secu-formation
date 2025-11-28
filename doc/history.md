@@ -1,15 +1,15 @@
-# Codex Project History
-1. use /init to create AGENTS.md and link AGENTS.md to README.md
-2. scaffold Express server entrypoint, handlers, and tests
-3. relocate Express entry files into src/lib
-4. integrate Better-SQLite3 persistence with message routes
-5. modify SQLite insert logic to demonstrate SQL injection vulnerability
-6. add `/messages/:id` lookup route using vulnerable SQL concatenation
-7. add test illustrating schema leakage via injected id payload
-8. remove legacy hello/health routes to focus on SQL injection scenarios
-9. delete unused HelloWorld scaffold
-10. reorganize tests for readability using grouped subtests
-11. update POST /messages handler to return raw message payload
-12. update GET /messages handler to return array directly
-13. update GET /messages/:id handler to return raw message
-14. refactor database access to route through executeParameterizedQuery
+# Historique du projet Codex
+1. utilisation de /init pour créer AGENTS.md et lier AGENTS.md au README.md
+2. scaffolding du point d'entrée du serveur Express, gestionnaires et tests
+3. relocalisation des fichiers d'entrée Express dans src/lib
+4. intégration de la persistance Better-SQLite3 avec les routes de messages
+5. modification de la logique d'insertion SQLite pour démontrer la vulnérabilité d'injection SQL
+6. ajout de la route de recherche `/messages/:id` utilisant la concaténation SQL vulnérable
+7. ajout d'un test illustrant la fuite de schéma via un payload id injecté
+8. suppression des routes legacy hello/health pour se concentrer sur les scénarios d'injection SQL
+9. suppression du scaffold HelloWorld inutilisé
+10. réorganisation des tests pour la lisibilité en utilisant des sous-tests groupés
+11. mise à jour du gestionnaire POST /messages pour retourner le payload de message brut
+12. mise à jour du gestionnaire GET /messages pour retourner le tableau directement
+13. mise à jour du gestionnaire GET /messages/:id pour retourner le message brut
+14. refactorisation de l'accès à la base de données pour passer par executeParameterizedQuery

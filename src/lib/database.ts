@@ -112,7 +112,7 @@ export function listMessages(): Message[] {
   );
 
   if (result.kind !== 'rows') {
-    throw new Error('Expected rows result for listMessages');
+    throw new Error('Résultat de type rows attendu pour listMessages');
   }
 
   const rows = result.rows as MessageRow[];
@@ -133,7 +133,7 @@ export function insertMessage(body: string): Message | undefined {
   );
 
   if (rowResult.kind !== 'rows') {
-    throw new Error('Expected rows result when fetching inserted message');
+    throw new Error('Résultat de type rows attendu lors de la récupération du message inséré');
   }
 
   const row = (rowResult.rows as MessageRow[])[0];
@@ -153,7 +153,7 @@ export function findMessageById(id: string): Message | undefined {
   const rowResult = executeParameterizedQuery(unsafeSql, []);
 
   if (rowResult.kind !== 'rows') {
-    throw new Error('Expected rows result when fetching message by id');
+    throw new Error('Résultat de type rows attendu lors de la récupération du message par id');
   }
 
   const row = (rowResult.rows as MessageRow[])[0];
@@ -174,6 +174,6 @@ export function clearMessages() {
   try {
     executeParameterizedQuery("DELETE FROM sqlite_sequence WHERE name = 'messages'", []);
   } catch {
-    // sqlite_sequence may not exist yet in new in-memory databases.
+    // sqlite_sequence peut ne pas encore exister dans les nouvelles bases de données en mémoire.
   }
 }

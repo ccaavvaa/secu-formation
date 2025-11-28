@@ -1,38 +1,38 @@
-# Repository Guidelines
+# Directives du dépôt
 
-- `src/lib/index.ts` hosts the HTTP bootstrap: read the `PORT` env, create the server, and keep it free of business logic.
-- `src/lib/app.ts` wires the Express instance, shared middleware, and route handlers (export handlers for direct unit tests). Routes actuelles : `/messages`, `/messages/:id`, et `POST /messages` pour la démonstration SQLi.
-- `src/lib/database.ts` centralises the Better-SQLite3 connection plus migrations and message helpers (including intentionally unsafe SQL for demos).
-- `src/index.ts` simply re-exports lib modules for consumers that import from the package root.
-- Domain logic lives under `src/lib/` and should stay framework-agnostic (e.g., add new feature modules alongside the database helpers).
-- Tests sit in `src/test/` beside the feature they cover with a `*.test.ts` suffix; prefer lightweight handler/unit tests instead of opening sockets.
-- TypeScript output goes to `dist/`; generated assets and log files should be ignored via `.gitignore`.
+- `src/lib/index.ts` héberge le bootstrap HTTP : lit l'env `PORT`, crée le serveur, et reste libre de logique métier.
+- `src/lib/app.ts` câble l'instance Express, le middleware partagé et les gestionnaires de routes (exporter les gestionnaires pour les tests unitaires directs). Routes actuelles : `/messages`, `/messages/:id`, et `POST /messages` pour la démonstration SQLi.
+- `src/lib/database.ts` centralise la connexion Better-SQLite3 plus les migrations et les helpers de messages (incluant du SQL intentionnellement non sécurisé pour les démos).
+- `src/index.ts` réexporte simplement les modules lib pour les consommateurs qui importent depuis la racine du package.
+- La logique métier réside sous `src/lib/` et doit rester indépendante du framework (par ex., ajouter de nouveaux modules de fonctionnalités aux côtés des helpers de base de données).
+- Les tests se trouvent dans `src/test/` à côté de la fonctionnalité qu'ils couvrent avec un suffixe `*.test.ts` ; privilégier les tests légers de gestionnaire/unitaires plutôt que d'ouvrir des sockets.
+- La sortie TypeScript va dans `dist/` ; les assets générés et les fichiers de logs doivent être ignorés via `.gitignore`.
 
-## Build, Test, and Development Commands
-- `npm start` → `node --import tsx src/index.ts`, launching the Express server against the current sources.
-- `npm run dev` → `tsx watch src/index.ts` for auto-reload during local development.
-- `npm run build` → transpiles TypeScript after cleaning `dist/`.
-- `npm test` → `node --import tsx --test src/test/app.test.ts`; set `SQLITE_DB_PATH=':memory:'` when you need isolated runs.
-- `npm run lint` → ESLint across `.ts` files with the shared TypeScript ruleset.
+## Commandes de build, test et développement
+- `npm start` → `node --import tsx src/index.ts`, lance le serveur Express contre les sources actuelles.
+- `npm run dev` → `tsx watch src/index.ts` pour le rechargement automatique pendant le développement local.
+- `npm run build` → transpile TypeScript après nettoyage de `dist/`.
+- `npm test` → `node --import tsx --test src/test/app.test.ts` ; définir `SQLITE_DB_PATH=':memory:'` lorsque vous avez besoin d'exécutions isolées.
+- `npm run lint` → ESLint sur les fichiers `.ts` avec le ruleset TypeScript partagé.
 
-## Coding Style & Naming Conventions
-- Stick with strict TypeScript settings already enforced by `tsconfig.json` and the ESLint preset.
-- Two-space indentation, single quotes unless interpolation makes template strings clearer, and explicit `.js` extensions in ESM imports.
-- Name route handlers in camelCase (`healthRouteHandler`), classes in PascalCase, and keep filenames descriptive (`userSession.service.ts`).
-- Centralize cross-route helpers in `src/lib/`; avoid inline business rules inside Express handlers.
-- Prefer repository-style helpers (e.g., `database.ts`) for persistence to keep handlers thin.
-- `insertMessage()` in `src/lib/database.ts` deliberately uses raw string SQL to demonstrate injection risks; do not "fix" it unless you update the learning materials.
-- `findMessageById()` mirrors the same anti-pattern for teaching read-path injection exploits.
+## Style de code et conventions de nommage
+- Respecter les paramètres TypeScript stricts déjà appliqués par `tsconfig.json` et le preset ESLint.
+- Indentation de deux espaces, guillemets simples sauf si l'interpolation rend les template strings plus claires, et extensions `.js` explicites dans les imports ESM.
+- Nommer les gestionnaires de routes en camelCase (`healthRouteHandler`), les classes en PascalCase, et garder les noms de fichiers descriptifs (`userSession.service.ts`).
+- Centraliser les helpers inter-routes dans `src/lib/` ; éviter les règles métier inline dans les gestionnaires Express.
+- Privilégier les helpers de style repository (par ex., `database.ts`) pour la persistance afin de garder les gestionnaires légers.
+- `insertMessage()` dans `src/lib/database.ts` utilise délibérément du SQL par chaîne brute pour démontrer les risques d'injection ; ne pas le "corriger" sauf si vous mettez à jour le matériel pédagogique.
+- `findMessageById()` reproduit le même anti-pattern pour enseigner les exploits d'injection en lecture.
 - `executeParameterizedQuery()` centralise l'exécution SQL paramétrée ; les scénarios vulnérables continuent d'y faire transiter des chaînes concaténées.
 
-## Testing Guidelines
-- Use Node's `node:test` with `assert/strict`. Mock the Express `Response` object as done in `src/test/app.test.ts` to keep tests sandbox-compatible.
-- Add new suites next to their targets (e.g., `src/lib/user/UserService.ts` → `src/test/user/UserService.test.ts`) and reference them from the `npm test` command when needed.
-- Target deterministic behaviour; prefer pure function tests and handler-level assertions over network calls.
-- Use the `clearMessages()` helper from `database.ts` when tests need a clean SQLite state, and run lint/tests (`npm run lint && npm test`) before opening a pull request.
+## Directives de tests
+- Utiliser le `node:test` de Node avec `assert/strict`. Simuler l'objet Express `Response` comme fait dans `src/test/app.test.ts` pour garder les tests compatibles sandbox.
+- Ajouter de nouvelles suites à côté de leurs cibles (par ex., `src/lib/user/UserService.ts` → `src/test/user/UserService.test.ts`) et les référencer depuis la commande `npm test` lorsque nécessaire.
+- Cibler un comportement déterministe ; privilégier les tests de fonctions pures et les assertions au niveau des gestionnaires plutôt que les appels réseau.
+- Utiliser le helper `clearMessages()` de `database.ts` lorsque les tests ont besoin d'un état SQLite propre, et exécuter lint/tests (`npm run lint && npm test`) avant d'ouvrir une pull request.
 
-## Commit & Pull Request Guidelines
-- Favor short, imperative commit subjects (e.g., `Introduce user session routes`) as seen in the log.
-- Rebase or squash noise before submitting; each PR should describe scope, risks, validation steps, and link any tracking issues.
-- Include CLI output or screenshots when behaviour changes (e.g., new routes or responses).
-- Confirm the server starts locally and reference which commands you executed in the PR template or description.
+## Directives de commit et pull request
+- Privilégier des sujets de commit courts et impératifs (par ex., `Introduire les routes de session utilisateur`) comme vu dans le log.
+- Rebase ou squash le bruit avant de soumettre ; chaque PR doit décrire la portée, les risques, les étapes de validation et lier les issues de suivi.
+- Inclure la sortie CLI ou des captures d'écran lorsque le comportement change (par ex., nouvelles routes ou réponses).
+- Confirmer que le serveur démarre localement et référencer les commandes exécutées dans le template ou la description de la PR.

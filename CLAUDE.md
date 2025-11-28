@@ -1,105 +1,105 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Ce fichier fournit des directives à Claude Code (claude.ai/code) lors du travail avec le code de ce dépôt.
 
-## Project Overview
+## Vue d'ensemble du projet
 
-This is a **security training project** that intentionally demonstrates SQL injection vulnerabilities. The codebase is a TypeScript/Express API with SQLite persistence, built to showcase both vulnerable patterns and secure alternatives for educational purposes.
+Il s'agit d'un **projet de formation à la sécurité** qui démontre intentionnellement des vulnérabilités d'injection SQL. La base de code est une API TypeScript/Express avec persistance SQLite, construite pour illustrer à la fois les modèles vulnérables et les alternatives sécurisées à des fins pédagogiques.
 
-**CRITICAL**: `insertMessage()` and `findMessageById()` in [src/lib/database.ts](src/lib/database.ts) contain **intentional SQL injection vulnerabilities**. Do not "fix" these functions unless explicitly updating the training materials, as they exist to demonstrate security risks.
+**CRITIQUE** : `insertMessage()` et `findMessageById()` dans [src/lib/database.ts](src/lib/database.ts) contiennent des **vulnérabilités d'injection SQL intentionnelles**. Ne pas "corriger" ces fonctions sauf si vous mettez explicitement à jour le matériel de formation, car elles existent pour démontrer les risques de sécurité.
 
-## Development Commands
+## Commandes de développement
 
 ```bash
-# Development (hot reload)
+# Développement (rechargement automatique)
 npm run dev
 
-# Production start
+# Démarrage en production
 npm start
 
-# Build TypeScript to dist/
+# Compiler TypeScript vers dist/
 npm run build
 
-# Run tests
+# Exécuter les tests
 npm test
 
-# Lint
+# Linter
 npm run lint
 
-# Run tests with in-memory database (isolated)
+# Exécuter les tests avec base de données en mémoire (isolé)
 SQLITE_DB_PATH=':memory:' npm test
 
-# Clean build output
+# Nettoyer la sortie de build
 npm run clean
 ```
 
-## Environment Variables
+## Variables d'environnement
 
-- `PORT`: HTTP server port (default: 3000)
-- `SQLITE_DB_PATH`: Database file path (default: `./data/app.db`, use `:memory:` for ephemeral)
+- `PORT` : Port du serveur HTTP (par défaut : 3000)
+- `SQLITE_DB_PATH` : Chemin du fichier de base de données (par défaut : `./data/app.db`, utiliser `:memory:` pour éphémère)
 
 ## Architecture
 
-### Core Structure
+### Structure principale
 
-- **[src/lib/index.ts](src/lib/index.ts)** - HTTP bootstrap: reads `PORT` env, creates server, no business logic
-- **[src/lib/app.ts](src/lib/app.ts)** - Express instance, middleware, route handlers (exported for unit tests)
-- **[src/lib/database.ts](src/lib/database.ts)** - Better-SQLite3 singleton, migrations, message helpers
-- **[src/index.ts](src/index.ts)** - Re-exports lib modules for package root consumers
-- **[src/test/](src/test/)** - Test files with `*.test.ts` suffix
+- **[src/lib/index.ts](src/lib/index.ts)** - Bootstrap HTTP : lit l'env `PORT`, crée le serveur, aucune logique métier
+- **[src/lib/app.ts](src/lib/app.ts)** - Instance Express, middleware, gestionnaires de routes (exportés pour les tests unitaires)
+- **[src/lib/database.ts](src/lib/database.ts)** - Singleton Better-SQLite3, migrations, helpers de messages
+- **[src/index.ts](src/index.ts)** - Réexporte les modules lib pour les consommateurs de la racine du package
+- **[src/test/](src/test/)** - Fichiers de tests avec le suffixe `*.test.ts`
 
-### API Routes
+### Routes API
 
-| Method | Route | Handler | Purpose |
+| Méthode | Route | Gestionnaire | Objectif |
 |--------|-------|---------|---------|
-| GET | `/messages` | `listMessagesHandler` | Lists messages (newest first) |
-| GET | `/messages/:id` | `getMessageHandler` | Returns message by id (vulnerable to injection) |
-| POST | `/messages` | `createMessageHandler` | Creates message (vulnerable to injection) |
+| GET | `/messages` | `listMessagesHandler` | Liste les messages (du plus récent au plus ancien) |
+| GET | `/messages/:id` | `getMessageHandler` | Retourne un message par id (vulnérable à l'injection) |
+| POST | `/messages` | `createMessageHandler` | Crée un message (vulnérable à l'injection) |
 
-### Database Module Design
+### Conception du module Database
 
-**Safe function**: `executeParameterizedQuery(sql, params)` - Centralized SQL execution that supports parameterized queries. However, the vulnerable helpers pass concatenated strings through this function, bypassing its safety.
+**Fonction sécurisée** : `executeParameterizedQuery(sql, params)` - Exécution SQL centralisée qui supporte les requêtes paramétrées. Cependant, les helpers vulnérables passent des chaînes concaténées à travers cette fonction, contournant sa sécurité.
 
-**Vulnerable functions (intentional)**:
-- `insertMessage(body)` - Line 127: Uses raw string concatenation `INSERT INTO messages (body) VALUES ('${body}')`
-- `findMessageById(id)` - Line 152: Uses raw string concatenation `WHERE id = ${id}`
+**Fonctions vulnérables (intentionnelles)** :
+- `insertMessage(body)` - Ligne 127 : Utilise la concaténation de chaînes brutes `INSERT INTO messages (body) VALUES ('${body}')`
+- `findMessageById(id)` - Ligne 152 : Utilise la concaténation de chaînes brutes `WHERE id = ${id}`
 
-**Safe functions**:
-- `listMessages()` - Uses parameterized queries correctly
-- `clearMessages()` - Test helper to reset database state
+**Fonctions sécurisées** :
+- `listMessages()` - Utilise correctement les requêtes paramétrées
+- `clearMessages()` - Helper de test pour réinitialiser l'état de la base de données
 
-## Testing Approach
+## Approche de test
 
-- Uses Node's built-in `node:test` with `assert/strict`
-- Tests directly invoke route handlers with mocked Express `Request`/`Response` objects
-- Avoids opening HTTP sockets for faster, sandbox-compatible tests
-- Set `SQLITE_DB_PATH=':memory:'` for test isolation
-- Use `clearMessages()` in test setup (`t.beforeEach`) to ensure clean state
+- Utilise le `node:test` intégré de Node avec `assert/strict`
+- Les tests invoquent directement les gestionnaires de routes avec des objets Express `Request`/`Response` simulés
+- Évite l'ouverture de sockets HTTP pour des tests plus rapides et compatibles sandbox
+- Définir `SQLITE_DB_PATH=':memory:'` pour l'isolation des tests
+- Utiliser `clearMessages()` dans la configuration du test (`t.beforeEach`) pour garantir un état propre
 
-Example test structure from [src/test/app.test.ts](src/test/app.test.ts):
+Exemple de structure de test tiré de [src/test/app.test.ts](src/test/app.test.ts) :
 ```typescript
 test('POST /messages handler', async (t) => {
   t.beforeEach(() => { clearMessages(); });
 
   await t.test('description', () => {
-    // Test implementation
+    // Implémentation du test
   });
 });
 ```
 
-## Code Style
+## Style de code
 
-- Strict TypeScript via [tsconfig.json](tsconfig.json): `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `strict`, `verbatimModuleSyntax`
-- ESM modules with `"type": "module"` in [package.json](package.json)
-- Explicit `.js` extensions in import paths (TypeScript resolves at compile time)
-- Two-space indentation, single quotes (unless interpolation needed)
-- camelCase for handlers (`listMessagesHandler`), PascalCase for classes
-- Keep route handlers thin; centralize business logic in `src/lib/` modules
-- Repository-style helpers in [database.ts](src/lib/database.ts) for persistence
+- TypeScript strict via [tsconfig.json](tsconfig.json) : `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `strict`, `verbatimModuleSyntax`
+- Modules ESM avec `"type": "module"` dans [package.json](package.json)
+- Extensions `.js` explicites dans les chemins d'import (TypeScript résout à la compilation)
+- Indentation de deux espaces, guillemets simples (sauf si interpolation nécessaire)
+- camelCase pour les gestionnaires (`listMessagesHandler`), PascalCase pour les classes
+- Garder les gestionnaires de routes légers ; centraliser la logique métier dans les modules `src/lib/`
+- Helpers de style repository dans [database.ts](src/lib/database.ts) pour la persistance
 
-## Commit Conventions
+## Conventions de commit
 
-- Short, imperative subjects (e.g., "Introduce user session routes")
-- Rebase/squash noise before submitting PRs
-- PRs should describe scope, risks, validation steps, and link tracking issues
-- Include CLI output or screenshots for behavior changes
+- Sujets courts et impératifs (ex : "Introduire les routes de session utilisateur")
+- Rebase/squash le bruit avant de soumettre les PRs
+- Les PRs doivent décrire la portée, les risques, les étapes de validation et lier les issues de suivi
+- Inclure la sortie CLI ou des captures d'écran pour les changements de comportement

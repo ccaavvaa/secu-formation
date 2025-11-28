@@ -20,40 +20,40 @@ type MockResponse<T> = {
 
 type ErrorPayload = { error: string };
 
-test('POST /messages handler', async (t) => {
+test('Gestionnaire POST /messages', async (t) => {
   t.beforeEach(() => {
     clearMessages();
   });
 
-  await t.test('persists trimmed body and returns payload', () => {
-    const response = invokeCreate('   Test message   ');
+  await t.test('persiste le corps nettoyé et retourne le payload', () => {
+    const response = invokeCreate('   Message de test   ');
 
     assert.equal(response.statusCode, 201);
     assert(response.jsonPayload);
-    assert.equal(response.jsonPayload?.body, 'Test message');
+    assert.equal(response.jsonPayload?.body, 'Message de test');
     assert.equal(typeof response.jsonPayload?.id, 'number');
   });
 
-  await t.test('rejects missing or empty payload', () => {
+  await t.test('rejette les payloads manquants ou vides', () => {
     const emptyResponse = createMockResponse<ErrorPayload>();
     createMessageHandler(createMockRequest({ body: '' }) as never, emptyResponse as never, noop);
     assert.equal(emptyResponse.statusCode, 400);
-    assert.deepEqual(emptyResponse.jsonPayload, { error: 'Message body is required.' });
+    assert.deepEqual(emptyResponse.jsonPayload, { error: 'Le corps du message est requis.' });
 
     const missingResponse = createMockResponse<ErrorPayload>();
     createMessageHandler(createMockRequest({}) as never, missingResponse as never, noop);
     assert.equal(missingResponse.statusCode, 400);
-    assert.deepEqual(missingResponse.jsonPayload, { error: 'Message body is required.' });
+    assert.deepEqual(missingResponse.jsonPayload, { error: 'Le corps du message est requis.' });
   });
 
-  await t.test('injection payload clears existing messages', () => {
-    invokeCreate('First safe message');
+  await t.test('le payload d\'injection efface les messages existants', () => {
+    invokeCreate('Premier message sûr');
 
     const maliciousBody = `'); DELETE FROM messages; --`;
     const injectionResponse = invokeCreate(maliciousBody);
 
     assert.equal(injectionResponse.statusCode, 500);
-    
+
     const listResponse = invokeList();
     assert.equal(listResponse.statusCode, 200);
     assert(Array.isArray(listResponse.jsonPayload));
@@ -61,13 +61,13 @@ test('POST /messages handler', async (t) => {
   });
 });
 
-test('GET /messages handler', async (t) => {
+test('Gestionnaire GET /messages', async (t) => {
   t.beforeEach(() => {
     clearMessages();
   });
 
-  await t.test('returns stored messages', () => {
-    invokeCreate('Stored');
+  await t.test('retourne les messages stockés', () => {
+    invokeCreate('Stocké');
 
     const response = invokeList();
 
@@ -75,36 +75,36 @@ test('GET /messages handler', async (t) => {
     assert(Array.isArray(response.jsonPayload));
     assert.equal(response.jsonPayload?.length, 1);
     const message = response.jsonPayload?.[0];
-    assert.equal(message.body, 'Stored');
+    assert.equal(message.body, 'Stocké');
     assert.equal(typeof message.id, 'number');
     assert.equal(typeof message.createdAt, 'string');
   });
 });
 
-test('GET /messages/:id handler', async (t) => {
+test('Gestionnaire GET /messages/:id', async (t) => {
   t.beforeEach(() => {
     clearMessages();
   });
 
-  await t.test('returns resource by id', () => {
-    const created = invokeCreate('Target message').jsonPayload;
+  await t.test('retourne la ressource par id', () => {
+    const created = invokeCreate('Message cible').jsonPayload;
     const response = invokeGet(String(created?.id ?? ''));
 
     assert.equal(response.statusCode, 200);
     assert.equal(response.jsonPayload?.id, created?.id);
-    assert.equal(response.jsonPayload?.body, 'Target message');
+    assert.equal(response.jsonPayload?.body, 'Message cible');
   });
 
-  await t.test('executes raw SQL when id is injected', () => {
-    invokeCreate('safe');
+  await t.test('exécute du SQL brut lorsque l\'id est injecté', () => {
+    invokeCreate('sûr');
 
     const response = invokeGet('0 OR 1=1');
 
     assert.equal(response.statusCode, 200);
-    assert.equal(response.jsonPayload?.body, 'safe');
+    assert.equal(response.jsonPayload?.body, 'sûr');
   });
 
-  await t.test('can leak schema definition via UNION payload', () => {
+  await t.test('peut divulguer la définition du schéma via un payload UNION', () => {
     const payload = "0 UNION SELECT 1, sql, '1970-01-01T00:00:00' FROM sqlite_master WHERE type='table' LIMIT 1 OFFSET 1--";
 
     const response = invokeGet(payload);
