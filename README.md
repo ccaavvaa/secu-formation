@@ -10,6 +10,9 @@ Projet de démonstration qui combine Express 5, TypeScript et SQLite pour illust
 
 Par défaut, le serveur HTTP écoute sur `http://localhost:3000`. Remplacer le port avec `PORT=<numéro>`. SQLite persiste dans `./data/app.db` ; définir `SQLITE_DB_PATH=':memory:'` pour des exécutions éphémères ou pointer vers n'importe quel chemin de fichier.
 
+### Documentation interactive Swagger
+Une interface Swagger UI est disponible sur `http://localhost:3000/api-docs` pour explorer et tester l'API directement dans le navigateur. La spécification OpenAPI complète est accessible sur `/api-docs.json`.
+
 ## API
 | Méthode | Route | Objectif |
 | --- | --- | --- |
