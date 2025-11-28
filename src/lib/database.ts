@@ -2,12 +2,6 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import DatabaseConstructor, { type Database as DatabaseInstance, type Statement as PreparedStatement } from 'better-sqlite3';
 
-type MessageRow = {
-  id: number;
-  body: string;
-  created_at: string;
-};
-
 let singletonDb: DatabaseInstance | undefined;
 
 function resolveDatabasePath() {
@@ -99,81 +93,43 @@ export function executeParameterizedQuery(sql: string, params: unknown[]): Query
   };
 }
 
+import { VulnerableMessageRepository } from './message-repository.js';
+
+// Instance par défaut utilisant l'implémentation vulnérable pour la démonstration
+const defaultRepository = new VulnerableMessageRepository();
+
 export type Message = {
   id: number;
   body: string;
   createdAt: string;
 };
 
+/**
+ * Liste tous les messages (délègue à l'implémentation vulnérable par défaut).
+ */
 export function listMessages(): Message[] {
-  const result = executeParameterizedQuery(
-    'SELECT id, body, created_at FROM messages ORDER BY id DESC',
-    [],
-  );
-
-  if (result.kind !== 'rows') {
-    throw new Error('Résultat de type rows attendu pour listMessages');
-  }
-
-  const rows = result.rows as MessageRow[];
-  return rows.map((row) => ({
-    id: row.id,
-    body: row.body,
-    createdAt: new Date(`${row.created_at}Z`).toISOString(),
-  }));
+  return defaultRepository.listMessages();
 }
 
+/**
+ * ⚠️ VULNÉRABLE À L'INJECTION SQL - Délègue à VulnerableMessageRepository.
+ * Pour une version sécurisée, voir SecureMessageRepository dans message-repository.ts
+ */
 export function insertMessage(body: string): Message | undefined {
-  const unsafeSql = `INSERT INTO messages (body) VALUES ('${body}')`;
-  executeParameterizedQuery(unsafeSql, []);
-
-  const rowResult = executeParameterizedQuery(
-    'SELECT id, body, created_at FROM messages WHERE id = last_insert_rowid()',
-    [],
-  );
-
-  if (rowResult.kind !== 'rows') {
-    throw new Error('Résultat de type rows attendu lors de la récupération du message inséré');
-  }
-
-  const row = (rowResult.rows as MessageRow[])[0];
-
-  if (row) {
-    return {
-      id: row.id,
-      body: row.body,
-      createdAt: new Date(`${row.created_at}Z`).toISOString(),
-    };
-  }
-  return undefined;
+  return defaultRepository.insertMessage(body);
 }
 
+/**
+ * ⚠️ VULNÉRABLE À L'INJECTION SQL - Délègue à VulnerableMessageRepository.
+ * Pour une version sécurisée, voir SecureMessageRepository dans message-repository.ts
+ */
 export function findMessageById(id: string): Message | undefined {
-  const unsafeSql = `SELECT id, body, created_at FROM messages WHERE id = ${id}`;
-  const rowResult = executeParameterizedQuery(unsafeSql, []);
-
-  if (rowResult.kind !== 'rows') {
-    throw new Error('Résultat de type rows attendu lors de la récupération du message par id');
-  }
-
-  const row = (rowResult.rows as MessageRow[])[0];
-
-  if (!row) {
-    return undefined;
-  }
-
-  return {
-    id: row.id,
-    body: row.body,
-    createdAt: new Date(`${row.created_at}Z`).toISOString(),
-  };
+  return defaultRepository.findMessageById(id);
 }
 
+/**
+ * Supprime tous les messages (utilisé pour les tests).
+ */
 export function clearMessages() {
-  executeParameterizedQuery('DELETE FROM messages', []);
-  try {
-    executeParameterizedQuery("DELETE FROM sqlite_sequence WHERE name = 'messages'", []);
-  } catch {
-    // sqlite_sequence peut ne pas encore exister dans les nouvelles bases de données en mémoire.
-  }
+  return defaultRepository.clearMessages();
 }
