@@ -107,3 +107,6 @@ jspm_packages/
 # dist directory
 dist/
 data/
+
+# Claude Code local configuration
+.claude/settings.local.json
