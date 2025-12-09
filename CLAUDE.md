@@ -126,6 +126,7 @@ test('POST /messages handler', async (t) => {
 
 ## Conventions de commit
 
+- **IMPORTANT** : Ne jamais faire de commits sans demander explicitement à l'utilisateur d'abord
 - Sujets courts et impératifs (ex : "Introduire les routes de session utilisateur")
 - Rebase/squash le bruit avant de soumettre les PRs
 - Les PRs doivent décrire la portée, les risques, les étapes de validation et lier les issues de suivi
