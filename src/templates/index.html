@@ -149,7 +149,68 @@
       font-family: 'Courier New', monospace;
       font-size: 0.85rem;
     }
+
+    .button-group {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    .button-delete {
+      background: #dc3545;
+    }
+
+    .button-delete:hover {
+      box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+    }
+
+    .xss-templates {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .xss-button {
+      background: #ffc107;
+      color: #333;
+      border: 1px solid #ffb300;
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .xss-button:hover {
+      background: #ffb300;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(255, 179, 0, 0.3);
+    }
+
+    .xss-button:active {
+      transform: translateY(0);
+    }
   </style>
+  <script>
+    function decodeHTML(html) {
+      const txt = document.createElement('textarea');
+      txt.innerHTML = html;
+      return txt.value;
+    }
+
+    function injectXSSPayload(payload) {
+      const textarea = document.getElementById('message-body');
+      textarea.value = decodeHTML(payload);
+      textarea.focus();
+      textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  </script>
 </head>
 <body>
   <div class="container">
@@ -177,7 +238,64 @@
             required
           ></textarea>
         </div>
-        <button type="submit">Envoyer le message</button>
+        <div class="xss-templates">
+          <p style="font-size: 0.9rem; color: #666; margin-bottom: 0.5rem;">Exemples d'injection XSS (pédagogique) :</p>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button
+              type="button"
+              class="xss-button"
+              data-payload="&lt;script&gt;alert(&quot;XSS via script tag&quot;)&lt;/script&gt;"
+              onclick="injectXSSPayload(this.getAttribute('data-payload'));"
+            >
+              &lt;script&gt;
+            </button>
+            <button
+              type="button"
+              class="xss-button"
+              data-payload="&lt;img src=x onerror=&quot;alert('XSS via img')&quot; /&gt;"
+              onclick="injectXSSPayload(this.getAttribute('data-payload'));"
+            >
+              &lt;img onerror&gt;
+            </button>
+            <button
+              type="button"
+              class="xss-button"
+              data-payload="&lt;svg onload=&quot;alert('XSS via svg')&quot;&gt;&lt;/svg&gt;"
+              onclick="injectXSSPayload(this.getAttribute('data-payload'));"
+            >
+              &lt;svg onload&gt;
+            </button>
+            <button
+              type="button"
+              class="xss-button"
+              data-payload="&lt;iframe src=&quot;javascript:alert('XSS via iframe')&quot;&gt;&lt;/iframe&gt;"
+              onclick="injectXSSPayload(this.getAttribute('data-payload'));"
+            >
+              &lt;iframe&gt;
+            </button>
+          </div>
+        </div>
+        <div class="button-group">
+          <button type="submit">Envoyer le message</button>
+          <button
+            type="button"
+            class="button-delete"
+            onclick="if (confirm('Êtes-vous sûr de vouloir supprimer tous les messages ? Cette action est irréversible.')) {
+              const form = document.createElement('form');
+              form.method = 'POST';
+              form.action = '/';
+              const input = document.createElement('input');
+              input.type = 'hidden';
+              input.name = 'deleteAll';
+              input.value = 'true';
+              form.appendChild(input);
+              document.body.appendChild(form);
+              form.submit();
+            }"
+          >
+            Supprimer tous les messages
+          </button>
+        </div>
       </form>
 
       <div class="messages-list">

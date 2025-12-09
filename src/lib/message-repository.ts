@@ -40,6 +40,11 @@ export interface MessageRepository {
    * Supprime tous les messages (utilisé pour les tests).
    */
   clearMessages(): void;
+
+  /**
+   * Supprime tous les messages (route utilisateur).
+   */
+  deleteAllMessages(): void;
 }
 
 /**
@@ -132,6 +137,10 @@ export class VulnerableMessageRepository implements MessageRepository {
       // sqlite_sequence peut ne pas encore exister dans les nouvelles bases de données en mémoire.
     }
   }
+
+  deleteAllMessages(): void {
+    this.clearMessages();
+  }
 }
 
 /**
@@ -223,5 +232,9 @@ export class SecureMessageRepository implements MessageRepository {
     } catch {
       // sqlite_sequence peut ne pas encore exister dans les nouvelles bases de données en mémoire.
     }
+  }
+
+  deleteAllMessages(): void {
+    this.clearMessages();
   }
 }

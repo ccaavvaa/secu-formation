@@ -67,6 +67,14 @@ export function createApp(messageRepository: MessageRepository) {
    * Route POST / - Traite le formulaire de création de message
    */
   const homePostHandler: RequestHandler = (req, res) => {
+    const deleteAll = typeof req.body?.deleteAll === 'string' ? req.body.deleteAll === 'true' : false;
+
+    if (deleteAll) {
+      messageRepository.deleteAllMessages();
+      res.redirect('/');
+      return;
+    }
+
     let bodyValue: string = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
 
     if (!bodyValue) {
