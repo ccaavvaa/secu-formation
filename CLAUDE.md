@@ -4,13 +4,15 @@ Ce fichier fournit des directives à Claude Code (claude.ai/code) lors du travai
 
 ## Vue d'ensemble du projet
 
-Il s'agit d'un **projet de formation à la sécurité** qui démontre intentionnellement des vulnérabilités d'injection SQL et de Cross-Site Scripting (XSS). La base de code est une API TypeScript/Express avec persistance SQLite et une interface web, construite pour illustrer à la fois les modèles vulnérables et les alternatives sécurisées à des fins pédagogiques.
+Il s'agit d'un **projet de formation à la sécurité** qui démontre intentionnellement des vulnérabilités d'injection SQL, de Cross-Site Scripting (XSS) et de traversée de répertoires (Path Traversal). La base de code est une API TypeScript/Express avec persistance SQLite et une interface web, construite pour illustrer à la fois les modèles vulnérables et les alternatives sécurisées à des fins pédagogiques.
 
 **CRITIQUE - Vulnérabilités intentionnelles** :
 
-1. **Injection SQL** : `insertMessage()` et `findMessageById()` dans [src/lib/database.ts](src/lib/database.ts) utilisent la concaténation de chaînes au lieu de requêtes paramétrées.
+1. **Injection SQL** : `insertMessage()` et `findMessageById()` dans [src/lib/message-repository.ts](src/lib/message-repository.ts) utilisent la concaténation de chaînes au lieu de requêtes paramétrées.
 
 2. **Cross-Site Scripting (XSS)** : La route `GET /` dans [src/lib/app.ts](src/lib/app.ts) appelle `generateHomePage()` depuis [src/lib/templates.ts](src/lib/templates.ts) qui génère du HTML en injectant directement le contenu des messages sans échappement. Tout contenu HTML/JavaScript sera exécuté dans le navigateur des visiteurs. Une version sécurisée (`generateSecureHomePage()`) utilisant l'escaping HTML est disponible à la route `GET /secure`.
+
+3. **Traversée de Répertoires (Path Traversal)** : La route `GET /files/:filename` dans [src/lib/app.ts](src/lib/app.ts) utilise `VulnerableFileRepository` qui sert des fichiers sans valider le paramètre filename. Un attaquant peut utiliser des séquences comme `../` pour accéder à des fichiers en dehors du répertoire public prévu. Une version sécurisée (`GET /secure-files/:filename`) utilisant `SecureFileRepository` avec validation de chemin est disponible.
 
 ## Commandes de développement
 
@@ -64,6 +66,8 @@ npm run clean
 | GET | `/messages` | `listMessagesHandler` | API : Liste les messages (du plus récent au plus ancien) |
 | GET | `/messages/:id` | `getMessageHandler` | API : Retourne un message par id (vulnérable à l'injection SQL) |
 | POST | `/messages` | `createMessageHandler` | API : Crée un message (vulnérable à l'injection SQL) |
+| GET | `/files/:filename` | `getFileHandler` | API : Sert un fichier du répertoire public (vulnérable à la traversée de répertoires) |
+| GET | `/secure-files/:filename` | `getSecureFileHandler` | API : Sert un fichier avec validation de chemin (protégé contre la traversée) |
 
 ### Conception du module Database
 
@@ -76,6 +80,21 @@ npm run clean
 **Fonctions sécurisées** :
 - `listMessages()` - Utilise correctement les requêtes paramétrées
 - `clearMessages()` - Helper de test pour réinitialiser l'état de la base de données
+
+### Conception du module File Repository
+
+**Architecture** : [src/lib/file-repository.ts](src/lib/file-repository.ts) implémente un pattern Repository pour la manipulation de fichiers, similaire à [src/lib/message-repository.ts](src/lib/message-repository.ts) pour les messages.
+
+**Implémentation vulnérable** : `VulnerableFileRepository`
+- Construit les chemins avec `path.join(baseDir, filename)` sans validation
+- Permet la traversée de répertoires via `../` et autres variantes
+- Expose les fichiers projet sensibles (package.json, CLAUDE.md, etc.)
+
+**Implémentation sécurisée** : `SecureFileRepository`
+- Résout le chemin avec `path.resolve()` pour normaliser tous les `..` et `.`
+- Vérifie que le chemin résolu reste dans le répertoire autorisé
+- Rejette les tentatives de traversée en retournant `undefined`
+- Bloque également les chemins absolus et autres contournements
 
 ## Démonstrations de vulnérabilités
 
@@ -97,6 +116,17 @@ Voir [src/test/xss.test.ts](src/test/xss.test.ts) pour des payloads commentés :
 - **Défacement** : `<img src=x onerror="document.body.innerHTML='COMPROMIS'">`
 
 **Interface de test** : Ouvrir `http://localhost:3000` dans un navigateur après `npm start` et tester les payloads XSS directement dans le formulaire.
+
+### Traversée de Répertoires (Path Traversal)
+
+Voir [src/test/path-traversal.test.ts](src/test/path-traversal.test.ts) pour des démonstrations annotées :
+- **Classic traversal** : `/files/../package.json` - Accès au répertoire parent
+- **Multiple sequences** : `/files/../../CLAUDE.md` - Remontée de plusieurs niveaux
+- **URL-encoded** : `/files/%2e%2e/tsconfig.json` - Contournement par encodage URL
+- **Backslash** : `/files/..\\package.json` - Traversée Windows
+- **Various bypasses** : Double-dot, null bytes, Unicode normalization
+
+**API de test** : Utiliser Swagger `http://localhost:3000/api-docs` pour tester les payloads sur `/files` (vulnérable) et `/secure-files` (sécurisé).
 
 ## Approche de test
 
@@ -127,7 +157,9 @@ test('POST /messages handler', async (t) => {
 - Garder les gestionnaires de routes légers ; centraliser la logique métier dans les modules `src/lib/`
 - Helpers de style repository dans [database.ts](src/lib/database.ts) pour la persistance
 
-## Version sécurisée (Protection XSS)
+## Versions sécurisées
+
+### Protection XSS
 
 Une version sécurisée complète a été implémentée pour démontrer les bonnes pratiques de sécurité contre les attaques XSS :
 
@@ -139,6 +171,16 @@ Une version sécurisée complète a été implémentée pour démontrer les bonn
   - [doc/QUICK-START-SECURE.md](doc/QUICK-START-SECURE.md) - Guide de démarrage rapide (5 min)
   - [doc/SECURE-VERSION-SUMMARY.md](doc/SECURE-VERSION-SUMMARY.md) - Résumé technique (15 min)
   - [doc/XSS-FIXES.md](doc/XSS-FIXES.md) - Documentation complète (30 min)
+
+### Protection Path Traversal
+
+Une version sécurisée pour la traversée de répertoires a été implémentée :
+
+- **Routes** : `GET /secure-files/:filename`
+- **Protection** : Résolution et validation du chemin avec `path.resolve()`
+- **Repository** : `SecureFileRepository` dans [src/lib/file-repository.ts](src/lib/file-repository.ts)
+- **Tests** : [src/test/path-traversal.test.ts](src/test/path-traversal.test.ts) avec 12+ cas de test
+- **Documentation** : [doc/PATH-TRAVERSAL.md](doc/PATH-TRAVERSAL.md) - Guide complet (30 min)
 
 ## Conventions de commit
 

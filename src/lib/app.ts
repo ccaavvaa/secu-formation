@@ -1,12 +1,20 @@
 import express, { type RequestHandler } from 'express';
 import swaggerUi from 'swagger-ui-express';
 import { type MessageRepository } from './message-repository.js';
+import { type FileRepository } from './file-repository.js';
 import { swaggerSpec } from './swagger.js';
 import { generateHomePage, generateSecureHomePage } from './templates.js';
 
-export function createApp(messageRepository: MessageRepository, secureRepository?: MessageRepository) {
+export function createApp(
+  messageRepository: MessageRepository,
+  secureRepository?: MessageRepository,
+  fileRepository?: FileRepository,
+  secureFileRepository?: FileRepository,
+) {
   const app = express();
   const secureRepo = secureRepository || messageRepository;
+  const fileRepo = fileRepository;
+  const secureFileRepo = secureFileRepository || fileRepository;
 
   const listMessagesHandler: RequestHandler = (_req, res) => {
     const messages = messageRepository.listMessages();
@@ -310,6 +318,151 @@ export function createApp(messageRepository: MessageRepository, secureRepository
 
   app.get('/secure', secureHomeHandler);
   app.post('/secure', secureHomePostHandler);
+
+  /**
+   * @openapi
+   * /files/{filename}:
+   *   get:
+   *     summary: Récupère un fichier par son nom
+   *     description: |
+   *       ⚠️ **VULNÉRABLE À LA TRAVERSÉE DE RÉPERTOIRES** - À des fins pédagogiques uniquement.
+   *
+   *       Cet endpoint sert des fichiers sans valider le paramètre filename.
+   *       Un attaquant peut utiliser des séquences comme "../" pour accéder
+   *       à des fichiers en dehors du répertoire public prévu.
+   *
+   *       **Exemples d'attaque :**
+   *       - `/files/../../../package.json` - Accès au package.json du projet
+   *       - `/files/..%2f..%2fetc%2fpasswd` - Path traversal URL-encodé
+   *       - `/files/....//....//etc/passwd` - Double-dot bypass
+   *     tags:
+   *       - Files
+   *     parameters:
+   *       - in: path
+   *         name: filename
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Nom du fichier (vulnérable à la traversée de répertoires)
+   *         example: "readme.txt"
+   *     responses:
+   *       200:
+   *         description: Fichier trouvé
+   *         content:
+   *           text/plain:
+   *             schema:
+   *               type: string
+   *       404:
+   *         description: Fichier non trouvé
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *                   example: "Fichier non trouvé"
+   */
+  const getFileHandler: RequestHandler = (req, res) => {
+    if (!fileRepo) {
+      res.status(501).json({ error: 'File serving not available' });
+      return;
+    }
+
+    const { filename } = req.params;
+    if (typeof filename !== 'string') {
+      res.status(400).json({ error: 'paramètre filename requis' });
+      return;
+    }
+
+    const file = fileRepo.getFile(filename);
+
+    if (!file) {
+      res.status(404).json({ error: 'Fichier non trouvé' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(file.content);
+  };
+
+  /**
+   * @openapi
+   * /secure-files/{filename}:
+   *   get:
+   *     summary: Récupère un fichier par son nom (version sécurisée)
+   *     description: |
+   *       ✅ **SÉCURISÉ CONTRE LA TRAVERSÉE DE RÉPERTOIRES**
+   *
+   *       Cet endpoint valide et normalise le chemin du fichier pour s'assurer
+   *       qu'il reste dans le répertoire autorisé.
+   *
+   *       **Protection :**
+   *       - Résolution complète du chemin avec path.resolve()
+   *       - Vérification que le chemin reste dans le répertoire de base
+   *       - Rejet de toute tentative de traversée de répertoires
+   *     tags:
+   *       - Files
+   *     parameters:
+   *       - in: path
+   *         name: filename
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Nom du fichier (protégé contre la traversée)
+   *         example: "readme.txt"
+   *     responses:
+   *       200:
+   *         description: Fichier trouvé
+   *         content:
+   *           text/plain:
+   *             schema:
+   *               type: string
+   *       404:
+   *         description: Fichier non trouvé
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *                   example: "Fichier non trouvé"
+   */
+  const getSecureFileHandler: RequestHandler = (req, res) => {
+    if (!secureFileRepo) {
+      res.status(501).json({ error: 'Secure file serving not available' });
+      return;
+    }
+
+    const { filename } = req.params;
+    if (typeof filename !== 'string') {
+      res.status(400).json({ error: 'paramètre filename requis' });
+      return;
+    }
+
+    const file = secureFileRepo.getFile(filename);
+
+    if (!file) {
+      res.status(404).json({ error: 'Fichier non trouvé' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(file.content);
+  };
+
+  app.get(/^\/files\/(.+)$/, (req, res): void => {
+    const filename = req.params[0] as string;
+    (req.params as unknown as Record<string, string>).filename = filename;
+    getFileHandler(req, res, (): void => {});
+  });
+
+  app.get(/^\/secure-files\/(.+)$/, (req, res): void => {
+    const filename = req.params[0] as string;
+    (req.params as unknown as Record<string, string>).filename = filename;
+    getSecureFileHandler(req, res, (): void => {});
+  });
 
   return app;
 }

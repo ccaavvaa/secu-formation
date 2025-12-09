@@ -1,5 +1,6 @@
 # Historique du projet Codex
 
+- ajouter démonstration de vulnérabilité traversée de répertoires (Path Traversal) avec endpoints sécurisés et tests complets
 - implémenter version sécurisée avec protection XSS complète (escaping + CSP + headers)
 - ajouter fonctionnalité suppression tous messages et exemples XSS pédagogiques
 - ajouter consigne d'approbation utilisateur avant commits
