@@ -52,11 +52,15 @@ export function createApp(messageRepository: MessageRepository) {
    * Route principale - Affiche la page web avec les messages
    * Génère le HTML via le module templates (qui contient la vulnérabilité XSS intentionnelle)
    */
-  const homeHandler: RequestHandler = (_req, res) => {
-    const messages = messageRepository.listMessages();
-    const html = generateHomePage(messages);
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(html);
+  const homeHandler: RequestHandler = async (_req, res) => {
+    try {
+      const messages = messageRepository.listMessages();
+      const html = await generateHomePage(messages);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(html);
+    } catch {
+      res.status(500).json({ error: 'Erreur lors du chargement de la page' });
+    }
   };
 
   /**

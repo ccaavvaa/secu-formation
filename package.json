@@ -7,7 +7,8 @@
     "test": "node --import tsx --test src/test/*.test.ts",
     "start": "node --import tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
-    "build": "npm run clean && tsc",
+    "build": "npm run clean && npm run copy-templates && tsc",
+    "copy-templates": "mkdir -p dist/templates && cp -r src/templates/* dist/templates/",
     "lint": "eslint . --ext .ts",
     "clean": "rm -rf dist"
   },
