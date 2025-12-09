@@ -10,7 +10,7 @@ Il s'agit d'un **projet de formation à la sécurité** qui démontre intentionn
 
 1. **Injection SQL** : `insertMessage()` et `findMessageById()` dans [src/lib/database.ts](src/lib/database.ts) utilisent la concaténation de chaînes au lieu de requêtes paramétrées.
 
-2. **Cross-Site Scripting (XSS)** : La route `GET /` dans [src/lib/app.ts](src/lib/app.ts) (ligne 55) appelle `generateHomePage()` depuis [src/lib/templates.js](src/lib/templates.js) qui génère du HTML en injectant directement le contenu des messages sans échappement. Tout contenu HTML/JavaScript sera exécuté dans le navigateur des visiteurs.
+2. **Cross-Site Scripting (XSS)** : La route `GET /` dans [src/lib/app.ts](src/lib/app.ts) appelle `generateHomePage()` depuis [src/lib/templates.ts](src/lib/templates.ts) qui génère du HTML en injectant directement le contenu des messages sans échappement. Tout contenu HTML/JavaScript sera exécuté dans le navigateur des visiteurs. Une version sécurisée (`generateSecureHomePage()`) utilisant l'escaping HTML est disponible à la route `GET /secure`.
 
 ## Commandes de développement
 
@@ -48,7 +48,7 @@ npm run clean
 
 - **[src/lib/index.ts](src/lib/index.ts)** - Bootstrap HTTP : lit l'env `PORT`, crée le serveur, aucune logique métier
 - **[src/lib/app.ts](src/lib/app.ts)** - Instance Express, middleware, gestionnaires de routes (exportés pour les tests unitaires)
-- **[src/lib/templates.ts](src/lib/templates.ts)** - Génération du HTML de la page d'accueil (contient la vulnérabilité XSS intentionnelle)
+- **[src/lib/templates.ts](src/lib/templates.ts)** - Génération du HTML de la page d'accueil (version vulnérable avec XSS intentionnelle et version sécurisée avec escaping HTML)
 - **[src/lib/database.ts](src/lib/database.ts)** - Singleton Better-SQLite3, migrations, helpers de messages
 - **[src/index.ts](src/index.ts)** - Réexporte les modules lib pour les consommateurs de la racine du package
 - **[src/test/](src/test/)** - Fichiers de tests avec le suffixe `*.test.ts`
@@ -59,6 +59,8 @@ npm run clean
 |--------|-------|---------|---------|
 | GET | `/` | `homeHandler` | Page web principale (vulnérable au XSS) |
 | POST | `/` | `homePostHandler` | Crée un message ou supprime tous les messages (si `deleteAll=true`) |
+| GET | `/secure` | `secureHomeHandler` | Page web sécurisée (protégée contre XSS) |
+| POST | `/secure` | `secureHomePostHandler` | Crée un message sécurisé ou supprime tous les messages |
 | GET | `/messages` | `listMessagesHandler` | API : Liste les messages (du plus récent au plus ancien) |
 | GET | `/messages/:id` | `getMessageHandler` | API : Retourne un message par id (vulnérable à l'injection SQL) |
 | POST | `/messages` | `createMessageHandler` | API : Crée un message (vulnérable à l'injection SQL) |
@@ -124,6 +126,19 @@ test('POST /messages handler', async (t) => {
 - camelCase pour les gestionnaires (`listMessagesHandler`), PascalCase pour les classes
 - Garder les gestionnaires de routes légers ; centraliser la logique métier dans les modules `src/lib/`
 - Helpers de style repository dans [database.ts](src/lib/database.ts) pour la persistance
+
+## Version sécurisée (Protection XSS)
+
+Une version sécurisée complète a été implémentée pour démontrer les bonnes pratiques de sécurité contre les attaques XSS :
+
+- **Routes** : `GET /secure` et `POST /secure`
+- **Protection** : Escaping HTML + Content Security Policy (CSP) + Headers de sécurité
+- **Template** : [src/templates/index-secure.html](src/templates/index-secure.html)
+- **Fonction** : `generateSecureHomePage()` et `escapeHtml()` dans [src/lib/templates.ts](src/lib/templates.ts)
+- **Documentation** :
+  - [doc/QUICK-START-SECURE.md](doc/QUICK-START-SECURE.md) - Guide de démarrage rapide (5 min)
+  - [doc/SECURE-VERSION-SUMMARY.md](doc/SECURE-VERSION-SUMMARY.md) - Résumé technique (15 min)
+  - [doc/XSS-FIXES.md](doc/XSS-FIXES.md) - Documentation complète (30 min)
 
 ## Conventions de commit
 

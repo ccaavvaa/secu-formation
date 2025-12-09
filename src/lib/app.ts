@@ -2,10 +2,11 @@ import express, { type RequestHandler } from 'express';
 import swaggerUi from 'swagger-ui-express';
 import { type MessageRepository } from './message-repository.js';
 import { swaggerSpec } from './swagger.js';
-import { generateHomePage } from './templates.js';
+import { generateHomePage, generateSecureHomePage } from './templates.js';
 
-export function createApp(messageRepository: MessageRepository) {
+export function createApp(messageRepository: MessageRepository, secureRepository?: MessageRepository) {
   const app = express();
+  const secureRepo = secureRepository || messageRepository;
 
   const listMessagesHandler: RequestHandler = (_req, res) => {
     const messages = messageRepository.listMessages();
@@ -269,6 +270,46 @@ export function createApp(messageRepository: MessageRepository) {
    *                   example: "Échec de la création du message."
    */
   app.post('/messages', createMessageHandler);
+
+  /**
+   * Route sécurisée - Affiche la page web avec les messages protégés contre XSS
+   * Génère le HTML via generateSecureHomePage qui échappe tous les contenus utilisateurs
+   */
+  const secureHomeHandler: RequestHandler = async (_req, res) => {
+    try {
+      const messages = secureRepo.listMessages();
+      const html = await generateSecureHomePage(messages);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(html);
+    } catch {
+      res.status(500).json({ error: 'Erreur lors du chargement de la page sécurisée' });
+    }
+  };
+
+  /**
+   * Route POST /secure - Traite le formulaire de création de message (version sécurisée)
+   */
+  const secureHomePostHandler: RequestHandler = (req, res) => {
+    const deleteAll = typeof req.body?.deleteAll === 'string' ? req.body.deleteAll === 'true' : false;
+
+    if (deleteAll) {
+      secureRepo.deleteAllMessages();
+      res.redirect('/secure');
+      return;
+    }
+
+    const bodyValue: string = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
+
+    if (!bodyValue) {
+      res.redirect('/secure');
+      return;
+    }
+    secureRepo.insertMessage(bodyValue);
+    res.redirect('/secure');
+  };
+
+  app.get('/secure', secureHomeHandler);
+  app.post('/secure', secureHomePostHandler);
 
   return app;
 }

@@ -1,8 +1,9 @@
 import { createApp } from './app.js';
-import { VulnerableMessageRepository } from './message-repository.js';
+import { VulnerableMessageRepository, SecureMessageRepository } from './message-repository.js';
 
-const repository = new VulnerableMessageRepository();
-const app = createApp(repository);
+const vulnerableRepository = new VulnerableMessageRepository();
+const secureRepository = new SecureMessageRepository();
+const app = createApp(vulnerableRepository, secureRepository);
 const port = Number.parseInt(process.env.PORT ?? '', 10) || 3000;
 
 app.listen(port, () => {

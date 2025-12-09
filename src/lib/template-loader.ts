@@ -4,35 +4,36 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
-let cachedTemplate: string | null = null;
+const cachedTemplates: Map<string, string> = new Map();
 
 /**
  * Charge le template HTML de manière asynchrone et le met en cache.
  * En développement, relance la lecture à chaque fois pour pouvoir modifier le fichier.
  * En production (dist), utilise le cache pour les performances.
  *
+ * @param templateName - Nom du template à charger (défaut: 'index.html')
  * @returns Le contenu du fichier template HTML
  */
-export async function loadTemplate(): Promise<string> {
+export async function loadTemplate(templateName: string = 'index.html'): Promise<string> {
   // En développement, toujours relire (fichier source)
   const isDev = import.meta.url.includes('/src/');
 
-  if (!isDev && cachedTemplate) {
-    return cachedTemplate;
+  if (!isDev && cachedTemplates.has(templateName)) {
+    return cachedTemplates.get(templateName)!;
   }
 
   // Construire le chemin vers le template
-  // En développement : src/templates/index.html
-  // En production : dist/templates/index.html
-  const templatePath = join(__dirname, isDev ? '../templates/index.html' : '../templates/index.html');
+  // En développement : src/templates/{templateName}
+  // En production : dist/templates/{templateName}
+  const templatePath = join(__dirname, `../templates/${templateName}`);
 
   try {
     const content = await readFile(templatePath, 'utf-8');
     if (!isDev) {
-      cachedTemplate = content;
+      cachedTemplates.set(templateName, content);
     }
     return content;
   } catch (error) {
-    throw new Error(`Erreur lors du chargement du template: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Erreur lors du chargement du template '${templateName}': ${error instanceof Error ? error.message : String(error)}`);
   }
 }
