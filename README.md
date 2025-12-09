@@ -1,6 +1,6 @@
 # secu-form
 
-Projet de démonstration pédagogique qui combine Express 5, TypeScript et SQLite pour illustrer deux vulnérabilités de sécurité majeures : **l'injection SQL** et le **Cross-Site Scripting (XSS)**. L'application contient intentionnellement ces vulnérabilités dans un environnement contrôlé pour permettre l'exploration, l'exploitation et l'apprentissage des bonnes pratiques de sécurité.
+Projet de démonstration pédagogique qui combine Express 5, TypeScript et SQLite pour illustrer trois vulnérabilités de sécurité majeures : **l'injection SQL**, le **Cross-Site Scripting (XSS)** et la **traversée de répertoires (Path Traversal)**. L'application contient intentionnellement ces vulnérabilités dans un environnement contrôlé pour permettre l'exploration, l'exploitation et l'apprentissage des bonnes pratiques de sécurité.
 
 ⚠️ **ATTENTION** : Ce code est volontairement vulnérable à des fins pédagogiques. Ne JAMAIS utiliser en production.
 
@@ -42,9 +42,13 @@ Interface Swagger UI disponible sur `http://localhost:3000/api-docs` pour explor
 |---------|-------|---------------|-------------|
 | `GET` | `/` | XSS | Page web principale avec rendu côté serveur non échappé |
 | `POST` | `/` | XSS | Traite le formulaire de création de message |
+| `GET` | `/secure` | Aucune | Page web sécurisée avec escaping HTML et CSP |
+| `POST` | `/secure` | Aucune | Crée un message sécurisé avec protection XSS |
 | `GET` | `/messages` | Aucune | Liste sécurisée des messages (du plus récent au plus ancien) |
 | `GET` | `/messages/:id` | SQL Injection | Récupère un message par ID (concaténation de chaînes) |
 | `POST` | `/messages` | SQL Injection | Crée un message (concaténation de chaînes) |
+| `GET` | `/files/:filename` | Path Traversal | Sert un fichier sans validation (traversée de répertoires) |
+| `GET` | `/secure-files/:filename` | Aucune | Sert un fichier avec validation de chemin sécurisée |
 
 ## Démonstrations de vulnérabilités
 
@@ -104,9 +108,39 @@ Accédez à `http://localhost:3000` et soumettez ces payloads dans le formulaire
    <img src=x onerror="document.body.innerHTML='<h1>SITE COMPROMIS</h1>'">
    ```
 
-**Code vulnérable** : `src/lib/app.ts` ligne 62
+**Code vulnérable** : `src/lib/templates.ts`
 - Utilise l'interpolation sans échappement : `<div class="message-body">${msg.body}</div>`
 - Le HTML est généré côté serveur sans sanitization
+
+### 3. Traversée de Répertoires (Path Traversal)
+
+**Endpoint vulnérable** : `GET /files/:filename`
+
+**Exemples d'exploitation** :
+
+```bash
+# Classic traversal - Accès au répertoire parent
+curl http://localhost:3000/files/../package.json
+
+# Multiple sequences - Remontée de plusieurs niveaux
+curl http://localhost:3000/files/../../CLAUDE.md
+
+# URL-encoded - Contournement par encodage
+curl http://localhost:3000/files/%2e%2e/tsconfig.json
+
+# Backslash Windows - Traversée avec backslash
+curl http://localhost:3000/files/..\\package.json
+```
+
+**Code vulnérable** : `src/lib/file-repository.ts` (classe `VulnerableFileRepository`)
+- Construit les chemins avec `path.join(baseDir, filename)` sans validation
+- Permet la traversée via `../` et autres variantes
+- Expose les fichiers projet sensibles (package.json, CLAUDE.md, etc.)
+
+**Version sécurisée** : `GET /secure-files/:filename` utilise `SecureFileRepository`
+- Résout le chemin avec `path.resolve()` pour normaliser tous les `..` et `.`
+- Vérifie que le chemin résolu reste dans le répertoire autorisé
+- Rejette les tentatives de traversée en retournant 404
 
 ## Tests automatisés
 
@@ -114,6 +148,7 @@ Les tests démontrent et documentent chaque vulnérabilité :
 
 - **`src/test/app.test.ts`** : Suite de tests d'injection SQL avec 9 scénarios d'exploitation commentés
 - **`src/test/xss.test.ts`** : Suite de tests XSS avec 8 vecteurs d'attaque différents
+- **`src/test/path-traversal.test.ts`** : Suite de tests Path Traversal avec 12+ cas de test
 
 Exécuter les tests :
 ```bash
@@ -131,15 +166,22 @@ SQLITE_DB_PATH=':memory:' npm test
 src/
 ├── lib/
 │   ├── index.ts              # Bootstrap HTTP et configuration du serveur
-│   ├── app.ts                # Application Express avec routes (vulnérable XSS)
+│   ├── app.ts                # Application Express avec routes (vulnérable XSS et Path Traversal)
+│   ├── templates.ts          # Génération HTML (versions vulnérable/sécurisée pour XSS)
 │   ├── database.ts           # Connexion SQLite et helpers (vulnérable SQL)
 │   ├── message-repository.ts # Pattern Repository avec versions vulnérable/sécurisée
+│   ├── file-repository.ts    # Pattern Repository pour fichiers (vulnérable/sécurisé)
 │   └── swagger.ts            # Configuration OpenAPI/Swagger
+├── templates/
+│   ├── index.html            # Template HTML vulnérable au XSS
+│   └── index-secure.html     # Template HTML sécurisé avec CSP
 ├── test/
 │   ├── app.test.ts           # Tests d'injection SQL
-│   └── xss.test.ts           # Tests XSS
+│   ├── xss.test.ts           # Tests XSS
+│   └── path-traversal.test.ts # Tests Path Traversal
 └── index.ts                  # Point d'entrée et réexports
 
+public/                       # Fichiers statiques autorisés
 data/                         # Base de données SQLite (par défaut)
 dist/                         # Sortie TypeScript compilée
 ```
@@ -181,10 +223,21 @@ Le projet utilise deux implémentations du repository pour démontrer les diffé
 4. Utiliser des bibliothèques de sanitization comme DOMPurify
 5. Activer le flag `HttpOnly` sur les cookies sensibles
 
+### Pour la traversée de répertoires
+1. Valider et normaliser tous les chemins avec `path.resolve()`
+2. Vérifier que le chemin résolu reste dans le répertoire autorisé
+3. Utiliser une liste blanche de fichiers autorisés
+4. Rejeter les chemins contenant `..`, `/`, `\` ou d'autres caractères suspects
+5. Ne jamais construire de chemins directement à partir d'entrées utilisateur
+
 ## Ressources pédagogiques
 
 - **[CLAUDE.md](CLAUDE.md)** : Directives détaillées pour Claude Code
 - **[AGENTS.md](AGENTS.md)** : Conventions de développement et architecture
+- **[doc/PATH-TRAVERSAL.md](doc/PATH-TRAVERSAL.md)** : Guide complet sur la traversée de répertoires (30 min)
+- **[doc/XSS-FIXES.md](doc/XSS-FIXES.md)** : Documentation complète sur les protections XSS (30 min)
+- **[doc/QUICK-START-SECURE.md](doc/QUICK-START-SECURE.md)** : Guide de démarrage rapide pour la version sécurisée (5 min)
+- **[doc/SECURE-VERSION-SUMMARY.md](doc/SECURE-VERSION-SUMMARY.md)** : Résumé technique des versions sécurisées (15 min)
 - **Tests annotés** : Chaque test contient des explications détaillées des vulnérabilités
 
 ## Contribution
