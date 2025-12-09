@@ -47,9 +47,9 @@ Ce document fournit les directives d'architecture, de style et de développement
 
 ### 2. Cross-Site Scripting (XSS)
 
-**Localisation** : `src/lib/app.ts`
-- `homeHandler` : Lignes ~54-263, génère du HTML côté serveur
-- **Ligne 62** : `<div class="message-body">${msg.body}</div>` sans échappement
+**Localisation** : `src/lib/templates.ts`
+- `generateHomePage()` : Génère du HTML côté serveur en injectant directement le contenu utilisateur
+- **Injection du contenu** : `<div class="message-body">${msg.body}</div>` sans échappement
 
 **Fonctionnement** :
 - Template strings injectent directement le contenu utilisateur dans le HTML
